@@ -227,9 +227,34 @@ export default function Home() {
                 <DialogTitle sx={{
                     borderBottom: '1px solid rgba(145, 71, 255, 0.2)',
                     color: '#efeff1',
-                    pb: 2
+                    pb: 2,
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center'
                 }}>
-                    {selectedDate && selectedDate.format('YYYY년 MM월 DD일')}의 훈련
+                    <Box>
+                        {selectedDate && selectedDate.format('YYYY년 MM월 DD일')}의 훈련
+
+                        {/* 과거 날짜 표시 추가 */}
+                        {selectedDate && selectedDate.isBefore(dayjs(), 'day') && (
+                            <Typography variant="caption" sx={{ display: 'block', color: '#ff8a80', mt: 1 }}>
+                                과거 훈련 기록은 수정할 수 없습니다.
+                            </Typography>
+                        )}
+                    </Box>
+
+                    {/* 과거 날짜가 아닐 때만 새 훈련 추가 버튼 표시 */}
+                    {(!selectedDate || !selectedDate.isBefore(dayjs(), 'day')) && (
+                        <Button
+                            variant="outlined"
+                            color="primary"
+                            size="small"
+                            startIcon={<AddIcon />}
+                            onClick={handleAddTrainingSession}
+                        >
+                            새 훈련
+                        </Button>
+                    )}
                 </DialogTitle>
                 <DialogContent sx={{ pt: 3 }}>
                     {sessionsForSelectedDate.length > 0 ? (
@@ -254,10 +279,14 @@ export default function Home() {
                                                 <Checkbox
                                                     checked={session.completed || false}
                                                     onChange={(e) => handleCheckSession(session.id, e.target.checked)}
+                                                    disabled={selectedDate && selectedDate.isBefore(dayjs(), 'day')} // 과거 날짜는 비활성화
                                                     sx={{
                                                         color: '#9147ff',
                                                         '&.Mui-checked': {
                                                             color: '#00b5ad',
+                                                        },
+                                                        '&.Mui-disabled': {
+                                                            color: session.completed ? '#006e68' : '#61357f',
                                                         }
                                                     }}
                                                 />
@@ -289,7 +318,7 @@ export default function Home() {
                                             })
                                         }}
                                     >
-                                        {session.content}
+                                        {session.content || ''}
                                     </Typography>
 
                                     <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
@@ -305,15 +334,6 @@ export default function Home() {
                             <Typography color="textSecondary">
                                 이 날짜에 등록된 훈련 세션이 없습니다.
                             </Typography>
-                            <Button
-                                variant="outlined"
-                                color="primary"
-                                startIcon={<AddIcon />}
-                                onClick={handleAddTrainingSession}
-                                sx={{ mt: 2 }}
-                            >
-                                새 훈련 추가하기
-                            </Button>
                         </Box>
                     )}
                 </DialogContent>
