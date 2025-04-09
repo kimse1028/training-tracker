@@ -6,6 +6,8 @@
   ],
   "rules": {
     "no-unused-vars": "warn",
-    "no-console": "warn"
+    "no-console": "warn",
+    "@typescript-eslint/no-explicit-any": "off",  // any 타입 허용
+    "@typescript-eslint/ban-ts-comment": "off"   // @ts-ignore 주석 허용
   }
 }

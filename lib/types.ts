@@ -1,12 +1,34 @@
+import { Timestamp } from 'firebase/firestore';
+
+/**
+ * 훈련 세션의 타입 정의
+ */
+export type RepeatType = 'none' | 'daily' | 'weekly';
+
 export interface TrainingSession {
     id: string;
-    userId: string;
-    title: string;
-    description: string;
-    date: string; // ISO 형식의 날짜 문자열
-    duration: number; // 분 단위
-    category: string; // 운동 종류 (예: 근력, 유산소, 유연성 등)
-    feeling: number; // 1-5 점수 (낮음 => 높음)
-    createdAt: string;
-    updatedAt: string;
+    name: string;
+    description?: string;
+    content?: string;
+    date?: string; // YYYY-MM-DD 형식
+    startTime?: string; // HH:MM 형식
+    duration?: number; // 분 단위
+    repeatType?: RepeatType;
+    completed: boolean;
+    isRepeated?: boolean; // 반복 일정인지 여부
 }
+
+/**
+ * Firestore에서 가져온 원시 훈련 세션 데이터의 타입 정의
+ */
+// /lib/types.ts 수정
+export interface FirestoreTrainingSession {
+    name: string;
+    content: string;
+    duration: number;
+    completed?: boolean;
+    date?: Timestamp;
+    createdAt?: Timestamp;
+    userId: string;
+}
+

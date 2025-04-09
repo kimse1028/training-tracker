@@ -2,18 +2,48 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Box, Button, Container, Typography, Paper, Grid, CircularProgress } from '@mui/material';
+import {
+    Box,
+    Button,
+    Container,
+    Typography,
+    Paper,
+    CircularProgress,
+    Dialog,
+    DialogTitle,
+    DialogContent,
+    DialogActions,
+    Checkbox,
+    FormControlLabel
+} from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
-import SportsEsportsIcon from '@mui/icons-material/SportsEsports';
-import { collection, query, where, orderBy, getDocs } from 'firebase/firestore';
-import {db} from "@/lib/firebase";
-import {useAuth} from "@/context/AuthContext";
+import dayjs, { Dayjs } from 'dayjs';
+import 'dayjs/locale/ko';
+import { useAuth } from '@/context/AuthContext';
+import {
+    collection,
+    query,
+    where,
+    orderBy,
+    getDocs,
+    updateDoc,
+    doc
+} from 'firebase/firestore';
+import { db } from '@/lib/firebase';
+import { TrainingSession, FirestoreTrainingSession } from '@/lib/types';
+import CustomCalendar from '@/components/CustomCalendar';
+
+// 로케일 설정
+dayjs.locale('ko');
 
 export default function Home() {
     const { user, loading, logout } = useAuth();
     const router = useRouter();
-    const [trainingSessions, setTrainingSessions] = useState([]);
-    const [loadingSessions, setLoadingSessions] = useState(false);
+    const [trainingSessions, setTrainingSessions] = useState<TrainingSession[]>([]);
+    const [loadingSessions, setLoadingSessions] = useState<boolean>(false);
+    const [selectedDate, setSelectedDate] = useState<Dayjs>(dayjs());
+    const [open, setOpen] = useState<boolean>(false);
+    const [sessionsForSelectedDate, setSessionsForSelectedDate] = useState<TrainingSession[]>([]);
 
     useEffect(() => {
         if (!loading && !user) {
@@ -35,11 +65,15 @@ export default function Home() {
                 );
 
                 const querySnapshot = await getDocs(q);
-                const sessions = querySnapshot.docs.map(doc => ({
-                    id: doc.id,
-                    ...doc.data(),
-                    createdAt: doc.data().createdAt?.toDate()
-                }));
+                const sessions = querySnapshot.docs.map(doc => {
+                    const data = doc.data() as Omit<FirestoreTrainingSession, 'id'>;
+                    return {
+                        id: doc.id,
+                        ...data,
+                        createdAt: data.createdAt?.toDate(),
+                        date: data.date?.toDate() || data.createdAt?.toDate()
+                    } as TrainingSession;
+                });
 
                 setTrainingSessions(sessions);
             } catch (error) {
@@ -52,8 +86,57 @@ export default function Home() {
         fetchTrainingSessions();
     }, [user]);
 
+    // 선택한 날짜에 대한 세션 필터링
+    useEffect(() => {
+        if (selectedDate && trainingSessions.length > 0) {
+            const filteredSessions = trainingSessions.filter(session =>
+                session.date && dayjs(session.date).format('YYYY-MM-DD') === selectedDate.format('YYYY-MM-DD')
+            );
+            setSessionsForSelectedDate(filteredSessions);
+        } else {
+            setSessionsForSelectedDate([]);
+        }
+    }, [selectedDate, trainingSessions]);
+
+    const handleDateSelect = (date: Dayjs) => {
+        setSelectedDate(date);
+        setOpen(true);
+    };
+
+    const handleClose = () => {
+        setOpen(false);
+    };
+
     const handleAddTrainingSession = () => {
         router.push('/training/add');
+    };
+
+    const handleCheckSession = async (sessionId: string, completed: boolean) => {
+        try {
+            // Firestore에서 해당 세션 업데이트
+            await updateDoc(doc(db, 'trainingSessions', sessionId), {
+                completed: completed
+            });
+
+            // 로컬 상태 업데이트
+            setTrainingSessions(prev =>
+                prev.map(session =>
+                    session.id === sessionId
+                        ? { ...session, completed }
+                        : session
+                )
+            );
+
+            setSessionsForSelectedDate(prev =>
+                prev.map(session =>
+                    session.id === sessionId
+                        ? { ...session, completed }
+                        : session
+                )
+            );
+        } catch (error) {
+            console.error('훈련 세션 업데이트 오류:', error);
+        }
     };
 
     if (loading) {
@@ -82,7 +165,6 @@ export default function Home() {
                     color: '#efeff1',
                     textShadow: '0 0 10px rgba(145, 71, 255, 0.5)'
                 }}>
-                    <SportsEsportsIcon sx={{ mr: 1, mb: -0.5, fontSize: 36 }} />
                     Training Tracker
                 </Typography>
 
@@ -99,87 +181,24 @@ export default function Home() {
                     color="primary"
                     startIcon={<AddIcon />}
                     onClick={handleAddTrainingSession}
-                    sx={{
-                        mb: 5,
-                        py: 1.5,
-                        px: 3,
-                    }}
+                    sx={{ mb: 4 }}
                 >
                     새 훈련 세션 추가
                 </Button>
 
-                {/* 훈련 세션 목록 */}
-                <Box sx={{ width: '100%', mt: 2 }}>
-                    <Typography variant="h5" sx={{
-                        mb: 3,
-                        color: '#efeff1',
-                        fontWeight: 600
-                    }}>
-                        내 훈련 세션
-                    </Typography>
-
+                {/* 커스텀 달력 */}
+                <Paper sx={{ p: 3, mb: 4, width: '100%' }}>
                     {loadingSessions ? (
                         <Box sx={{ display: 'flex', justifyContent: 'center', my: 4 }}>
                             <CircularProgress size={30} sx={{ color: '#9147ff' }} />
                         </Box>
-                    ) : trainingSessions.length > 0 ? (
-                        <Grid container spacing={3}>
-                            {trainingSessions.map((session) => (
-                                <Grid item xs={12} sm={6} md={4} key={session.id}>
-                                    <Paper
-                                        elevation={3}
-                                        sx={{
-                                            p: 3,
-                                            height: '100%',
-                                            position: 'relative',
-                                            overflow: 'hidden',
-                                            '&::before': {
-                                                content: '""',
-                                                position: 'absolute',
-                                                top: 0,
-                                                left: 0,
-                                                width: '4px',
-                                                height: '100%',
-                                                backgroundColor: '#9147ff',
-                                            }
-                                        }}
-                                    >
-                                        <Typography variant="h6" sx={{ color: '#efeff1' }}>
-                                            {session.name}
-                                        </Typography>
-                                        <Typography variant="body2" sx={{ mt: 1, color: '#adadb8', height: '60px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                            {session.content}
-                                        </Typography>
-                                        <Box sx={{ mt: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                            <Typography variant="body2" sx={{
-                                                color: '#00b5ad',
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                fontWeight: 600
-                                            }}>
-                                                {session.duration}분
-                                            </Typography>
-                                            <Typography variant="caption" sx={{ color: '#adadb8' }}>
-                                                {session.createdAt ? new Date(session.createdAt).toLocaleDateString() : '날짜 없음'}
-                                            </Typography>
-                                        </Box>
-                                    </Paper>
-                                </Grid>
-                            ))}
-                        </Grid>
                     ) : (
-                        <Paper
-                            sx={{
-                                p: 4,
-                                textAlign: 'center',
-                                color: '#adadb8',
-                                border: '1px dashed rgba(145, 71, 255, 0.3)',
-                            }}
-                        >
-                            <Typography>등록된 훈련 세션이 없습니다. 새로운 훈련 세션을 추가해보세요!</Typography>
-                        </Paper>
+                        <CustomCalendar
+                            trainingSessions={trainingSessions}
+                            onDateSelect={handleDateSelect}
+                        />
                     )}
-                </Box>
+                </Paper>
 
                 <Button
                     variant="outlined"
@@ -192,6 +211,118 @@ export default function Home() {
                     로그아웃
                 </Button>
             </Box>
+
+            {/* 선택한 날짜의 훈련 세션 다이얼로그 */}
+            <Dialog
+                open={open}
+                onClose={handleClose}
+                fullWidth
+                maxWidth="sm"
+                PaperProps={{
+                    sx: {
+                        borderRadius: 2,
+                    }
+                }}
+            >
+                <DialogTitle sx={{
+                    borderBottom: '1px solid rgba(145, 71, 255, 0.2)',
+                    color: '#efeff1',
+                    pb: 2
+                }}>
+                    {selectedDate && selectedDate.format('YYYY년 MM월 DD일')}의 훈련
+                </DialogTitle>
+                <DialogContent sx={{ pt: 3 }}>
+                    {sessionsForSelectedDate.length > 0 ? (
+                        <Box>
+                            {sessionsForSelectedDate.map((session) => (
+                                <Paper
+                                    key={session.id}
+                                    sx={{
+                                        p: 2,
+                                        mb: 2,
+                                        borderLeft: '4px solid #9147ff',
+                                        transition: 'all 0.2s',
+                                        ...(session.completed && {
+                                            opacity: 0.7,
+                                            borderLeft: '4px solid #00b5ad',
+                                        })
+                                    }}
+                                >
+                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <FormControlLabel
+                                            control={
+                                                <Checkbox
+                                                    checked={session.completed || false}
+                                                    onChange={(e) => handleCheckSession(session.id, e.target.checked)}
+                                                    sx={{
+                                                        color: '#9147ff',
+                                                        '&.Mui-checked': {
+                                                            color: '#00b5ad',
+                                                        }
+                                                    }}
+                                                />
+                                            }
+                                            label={
+                                                <Typography
+                                                    variant="h6"
+                                                    sx={{
+                                                        color: '#efeff1',
+                                                        ...(session.completed && {
+                                                            textDecoration: 'line-through',
+                                                            color: '#adadb8'
+                                                        })
+                                                    }}
+                                                >
+                                                    {session.name}
+                                                </Typography>
+                                            }
+                                        />
+                                    </Box>
+
+                                    <Typography
+                                        variant="body2"
+                                        sx={{
+                                            ml: 4,
+                                            color: '#adadb8',
+                                            ...(session.completed && {
+                                                textDecoration: 'line-through'
+                                            })
+                                        }}
+                                    >
+                                        {session.content}
+                                    </Typography>
+
+                                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
+                                        <Typography variant="body2" sx={{ color: '#00b5ad' }}>
+                                            {session.duration}분
+                                        </Typography>
+                                    </Box>
+                                </Paper>
+                            ))}
+                        </Box>
+                    ) : (
+                        <Box sx={{ textAlign: 'center', py: 3 }}>
+                            <Typography color="textSecondary">
+                                이 날짜에 등록된 훈련 세션이 없습니다.
+                            </Typography>
+                            <Button
+                                variant="outlined"
+                                color="primary"
+                                startIcon={<AddIcon />}
+                                onClick={handleAddTrainingSession}
+                                sx={{ mt: 2 }}
+                            >
+                                새 훈련 추가하기
+                            </Button>
+                        </Box>
+                    )}
+                </DialogContent>
+                <DialogActions sx={{ borderTop: '1px solid rgba(145, 71, 255, 0.2)', px: 3, py: 2 }}>
+                    <Button onClick={handleClose} color="secondary">
+                        닫기
+                    </Button>
+                </DialogActions>
+            </Dialog>
         </Container>
     );
 }
