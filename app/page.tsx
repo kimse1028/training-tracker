@@ -32,6 +32,9 @@ import {
 import { db } from '@/lib/firebase';
 import { TrainingSession, FirestoreTrainingSession } from '@/lib/types';
 import CustomCalendar from '@/components/CustomCalendar';
+import TrainingTimer from '@/components/TrainingTimer';
+import PlayArrowIcon from "@mui/icons-material/PlayArrow";
+
 
 // 로케일 설정
 dayjs.locale('ko');
@@ -44,6 +47,8 @@ export default function Home() {
     const [selectedDate, setSelectedDate] = useState<Dayjs>(dayjs());
     const [open, setOpen] = useState<boolean>(false);
     const [sessionsForSelectedDate, setSessionsForSelectedDate] = useState<TrainingSession[]>([]);
+    const [activeTimerSessionId, setActiveTimerSessionId] = useState<string | null>(null);
+
 
     useEffect(() => {
         if (!loading && !user) {
@@ -58,11 +63,10 @@ export default function Home() {
 
             try {
                 setLoadingSessions(true);
-                const q = query(
-                    collection(db, 'trainingSessions'),
-                    where('userId', '==', user.uid),
-                    orderBy('createdAt', 'desc')
-                );
+
+                // 새로운 구조: trainingSessions/{userID}/sessions
+                const sessionsRef = collection(db, 'trainingSessions', user.uid, 'sessions');
+                const q = query(sessionsRef, orderBy('createdAt', 'desc'));
 
                 const querySnapshot = await getDocs(q);
                 const sessions = querySnapshot.docs.map(doc => {
@@ -78,6 +82,30 @@ export default function Home() {
                 setTrainingSessions(sessions);
             } catch (error) {
                 console.error('훈련 세션 조회 오류:', error);
+
+                // 혹시 기존 구조에 데이터가 있다면 레거시 데이터도 조회 시도
+                try {
+                    const legacyQuery = query(
+                        collection(db, 'trainingSessions'),
+                        where('userId', '==', user.uid),
+                        orderBy('createdAt', 'desc')
+                    );
+
+                    const legacySnapshot = await getDocs(legacyQuery);
+                    const legacySessions = legacySnapshot.docs.map(doc => {
+                        const data = doc.data() as Omit<FirestoreTrainingSession, 'id'>;
+                        return {
+                            id: doc.id,
+                            ...data,
+                            createdAt: data.createdAt?.toDate(),
+                            date: data.date?.toDate() || data.createdAt?.toDate()
+                        } as TrainingSession;
+                    });
+
+                    setTrainingSessions(legacySessions);
+                } catch (secondError) {
+                    console.error('레거시 훈련 세션 조회 오류:', secondError);
+                }
             } finally {
                 setLoadingSessions(false);
             }
@@ -98,6 +126,14 @@ export default function Home() {
         }
     }, [selectedDate, trainingSessions]);
 
+    const handleTimerComplete = () => {
+        // 타이머가 완료되면 자동으로 훈련을 완료 상태로 변경
+        if (activeTimerSessionId) {
+            handleCheckSession(activeTimerSessionId, true);
+            setActiveTimerSessionId(null);
+        }
+    };
+
     const handleDateSelect = (date: Dayjs) => {
         setSelectedDate(date);
         setOpen(true);
@@ -113,10 +149,23 @@ export default function Home() {
 
     const handleCheckSession = async (sessionId: string, completed: boolean) => {
         try {
-            // Firestore에서 해당 세션 업데이트
-            await updateDoc(doc(db, 'trainingSessions', sessionId), {
-                completed: completed
-            });
+            if (!user) return;
+
+            // 새 구조에서 세션 업데이트
+            const sessionDocRef = doc(db, 'trainingSessions', user.uid, 'sessions', sessionId);
+
+            try {
+                // 새 경로에서 업데이트 시도
+                await updateDoc(sessionDocRef, {
+                    completed: completed
+                });
+            } catch (error) {
+                console.error('업데이트 오류:', error);
+                // 새 경로에서 실패할 경우 기존 경로로 시도 (레거시 지원)
+                await updateDoc(doc(db, 'trainingSessions', sessionId), {
+                    completed: completed
+                });
+            }
 
             // 로컬 상태 업데이트
             setTrainingSessions(prev =>
@@ -326,6 +375,37 @@ export default function Home() {
                                             {session.duration}분
                                         </Typography>
                                     </Box>
+
+                                    {/* 타이머 추가 */}
+                                    {activeTimerSessionId === session.id && (
+                                        <TrainingTimer
+                                            key={`timer-${session.id}`}
+                                            duration={session.duration || 0}
+                                            sessionName={session.name}
+                                            onComplete={handleTimerComplete}
+                                        />
+                                    )}
+
+                                    {!session.completed && !selectedDate.isBefore(dayjs(), 'day') && activeTimerSessionId !== session.id && (
+                                        <Box sx={{ mt: 2, textAlign: 'right' }}>
+                                            <Button
+                                                variant="outlined"
+                                                size="small"
+                                                startIcon={<PlayArrowIcon />}
+                                                onClick={() => setActiveTimerSessionId(session.id)}
+                                                sx={{
+                                                    color: '#9147ff',
+                                                    borderColor: '#9147ff',
+                                                    '&:hover': {
+                                                        borderColor: '#772ce8',
+                                                        bgcolor: 'rgba(145, 71, 255, 0.1)'
+                                                    }
+                                                }}
+                                            >
+                                                타이머 시작
+                                            </Button>
+                                        </Box>
+                                    )}
                                 </Paper>
                             ))}
                         </Box>

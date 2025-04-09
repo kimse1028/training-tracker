@@ -15,7 +15,7 @@ import {
     FormHelperText,
     Paper
 } from '@mui/material';
-import { LocalizationProvider, DatePicker, TimePicker } from '@mui/x-date-pickers';
+import { LocalizationProvider, DatePicker } from '@mui/x-date-pickers';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import dayjs, { Dayjs } from 'dayjs';
 import 'dayjs/locale/ko';
@@ -127,48 +127,68 @@ const NewTrainingForm = () => {
         try {
             setSubmitting(true);
 
-            // 기본 세션 생성 (첫 번째 세션)
-            const sessionData = {
-                userId: user.uid,
-                name: formValues.name,
-                content: formValues.content,
-                date: formValues.date?.toDate(),
-                duration: formValues.duration,
-                completed: false,
-                createdAt: serverTimestamp(),
-                repeatType: formValues.repeatType,
-                isRepeated: false
-            };
+            // 사용자가 로그인했고 날짜가 선택되었는지 확인
+            if (user && formValues.date) {
+                // 날짜 데이터 추출
+                const year = formValues.date.format('YYYY');
+                const month = formValues.date.format('MM');
+                const day = formValues.date.format('DD');
 
-            // Firestore에 첫 번째 세션 추가
-            await addDoc(collection(db, 'trainingSessions'), sessionData);
+                // 사용자별 sessions 컬렉션 참조
+                const sessionsCollectionRef = collection(db, 'trainingSessions', user.uid, 'sessions');
 
-            // 반복 일정 생성
-            if (formValues.repeatType !== 'none' && formValues.date) {
-                let currentDate = formValues.date.clone();
-                const endDate = currentDate.add(3, 'month'); // 3개월 동안의 반복 세션 생성
+                // 기본 세션 데이터 준비
+                const sessionData = {
+                    name: formValues.name,
+                    content: formValues.content,
+                    date: formValues.date.toDate(),
+                    year: year,      // 년도 필드 추가
+                    month: month,    // 월 필드 추가
+                    day: day,        // 일 필드 추가
+                    duration: formValues.duration,
+                    completed: false,
+                    createdAt: serverTimestamp(),
+                    repeatType: formValues.repeatType,
+                    isRepeated: false
+                };
 
-                while (currentDate.isBefore(endDate)) {
-                    if (formValues.repeatType === 'daily') {
-                        currentDate = currentDate.add(1, 'day');
-                    } else if (formValues.repeatType === 'weekly') {
-                        currentDate = currentDate.add(1, 'week');
+                // trainingSessions/{userID}/sessions 컬렉션에 문서 추가
+                await addDoc(sessionsCollectionRef, sessionData);
+
+                // 반복 일정 생성
+                if (formValues.repeatType !== 'none') {
+                    let currentDate = formValues.date.clone();
+                    const endDate = formValues.date.clone().add(3, 'month'); // 3개월 동안의 반복 세션 생성
+
+                    while (currentDate.isBefore(endDate)) {
+                        if (formValues.repeatType === 'daily') {
+                            currentDate = currentDate.add(1, 'day');
+                        } else if (formValues.repeatType === 'weekly') {
+                            currentDate = currentDate.add(1, 'week');
+                        }
+
+                        // 반복 세션의 날짜 데이터
+                        const repeatYear = currentDate.format('YYYY');
+                        const repeatMonth = currentDate.format('MM');
+                        const repeatDay = currentDate.format('DD');
+
+                        const repeatSessionData = {
+                            name: formValues.name,
+                            content: formValues.content,
+                            date: currentDate.toDate(),
+                            year: repeatYear,
+                            month: repeatMonth,
+                            day: repeatDay,
+                            duration: formValues.duration,
+                            completed: false,
+                            createdAt: serverTimestamp(),
+                            repeatType: formValues.repeatType,
+                            isRepeated: true
+                        };
+
+                        // 동일한 컬렉션에 반복 세션 추가
+                        await addDoc(sessionsCollectionRef, repeatSessionData);
                     }
-
-                    const repeatSessionData = {
-                        userId: user.uid,
-                        name: formValues.name,
-                        content: formValues.content,
-                        date: currentDate.toDate(),
-                        duration: formValues.duration,
-                        completed: false,
-                        createdAt: serverTimestamp(),
-                        repeatType: formValues.repeatType,
-                        isRepeated: true
-                    };
-
-                    // Firestore에 반복 세션 추가
-                    await addDoc(collection(db, 'trainingSessions'), repeatSessionData);
                 }
             }
 
