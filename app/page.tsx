@@ -16,7 +16,7 @@ import {
     Checkbox,
     FormControlLabel,
     Card,
-    CardContent
+    CardContent, TextField
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
@@ -34,7 +34,7 @@ import {
     doc,
     deleteDoc,
     limit,
-    writeBatch
+    writeBatch, addDoc
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { TrainingSession, FirestoreTrainingSession } from '@/lib/types';
@@ -44,6 +44,14 @@ import {User} from "firebase/auth";
 // 로케일 설정
 dayjs.locale('ko');
 
+// 피드백 타입 정의
+type Feedback = {
+    id: string;
+    content: string;
+    date: Date;
+    createdAt: Date;
+    userId: string;
+};
 
 // Slogan 타입 정의
 type Slogan = {
@@ -59,6 +67,166 @@ type SloganSectionProps = {
     loadingSlogans: boolean;
     slogans: Slogan[];
     setSlogans: Dispatch<SetStateAction<Slogan[]>>;
+};
+
+// 피드백 섹션 UI 컴포넌트
+const FeedbackSection = ({
+                             user,
+                             selectedDate,
+                             feedback,
+                             setFeedback,
+                             isLoading
+                         }: {
+    user: User;
+    selectedDate: Dayjs;
+    feedback: Feedback | null;
+    setFeedback: (feedback: Feedback | null) => void;
+    isLoading: boolean;
+}) => {
+    const [content, setContent] = useState<string>(feedback?.content || '');
+    const [isSaving, setIsSaving] = useState<boolean>(false);
+    const [characterCount, setCharacterCount] = useState<number>(content.length || 0);
+    const MAX_CHAR_COUNT = 1000;
+
+    useEffect(() => {
+        if (feedback) {
+            setContent(feedback.content);
+            setCharacterCount(feedback.content.length);
+        } else {
+            setContent('');
+            setCharacterCount(0);
+        }
+    }, [feedback]);
+
+    const handleContentChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+        const newContent = e.target.value;
+        if (newContent.length <= MAX_CHAR_COUNT) {
+            setContent(newContent);
+            setCharacterCount(newContent.length);
+        }
+    };
+
+    const saveFeedback = async () => {
+        if (!user || content.trim() === '') return;
+
+        try {
+            setIsSaving(true);
+
+            const dateStr = selectedDate.format('YYYY-MM-DD');
+            const feedbackRef = collection(db, 'userFeedback', user.uid, 'daily');
+            const q = query(feedbackRef, where('date', '==', dateStr));
+            const querySnapshot = await getDocs(q);
+
+            const newFeedback = {
+                content: content.trim(),
+                date: dateStr,
+                createdAt: new Date(),
+                userId: user.uid
+            };
+
+            let docId;
+
+            if (!querySnapshot.empty) {
+                // 기존 피드백 업데이트
+                docId = querySnapshot.docs[0].id;
+                await updateDoc(doc(db, 'userFeedback', user.uid, 'daily', docId), newFeedback);
+            } else {
+                // 새 피드백 생성
+                const docRef = await addDoc(collection(db, 'userFeedback', user.uid, 'daily'), newFeedback);
+                docId = docRef.id;
+            }
+
+            setFeedback({
+                id: docId,
+                ...newFeedback,
+                date: new Date(dateStr),
+                createdAt: new Date()
+            });
+
+        } catch (error) {
+            console.error('피드백 저장 오류:', error);
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    if (isLoading) {
+        return (
+            <Box sx={{ display: 'flex', justifyContent: 'center', my: 3 }}>
+                <CircularProgress size={24} sx={{ color: '#9147ff' }} />
+            </Box>
+        );
+    }
+
+    return (
+        <Box sx={{ mt: 4, borderTop: '1px solid rgba(145, 71, 255, 0.2)', pt: 3 }}>
+            <Typography variant="h6" sx={{ mb: 2, color: '#efeff1' }}>
+                오늘의 피드백
+            </Typography>
+
+            <TextField
+                multiline
+                fullWidth
+                rows={4}
+                value={content}
+                onChange={handleContentChange}
+                placeholder="오늘 훈련에 대한 피드백이나 생각을 남겨보세요. (최대 1000자)"
+                disabled={selectedDate.isBefore(dayjs(), 'day')}
+                InputProps={{
+                    sx: {
+                        color: '#efeff1',
+                        '&.Mui-disabled': {
+                            color: '#adadb8',
+                        }
+                    }
+                }}
+                sx={{
+                    '& .MuiOutlinedInput-root': {
+                        '& fieldset': {
+                            borderColor: 'rgba(145, 71, 255, 0.3)',
+                        },
+                        '&:hover fieldset': {
+                            borderColor: 'rgba(145, 71, 255, 0.5)',
+                        },
+                        '&.Mui-focused fieldset': {
+                            borderColor: '#9147ff',
+                        },
+                    },
+                }}
+            />
+
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 1 }}>
+                <Typography variant="caption" sx={{ color: characterCount >= MAX_CHAR_COUNT ? '#ff8a80' : '#adadb8' }}>
+                    {characterCount}/{MAX_CHAR_COUNT}자
+                </Typography>
+
+                {!selectedDate.isBefore(dayjs(), 'day') && (
+                    <Button
+                        variant="contained"
+                        color="primary"
+                        size="small"
+                        onClick={saveFeedback}
+                        disabled={isSaving || content.trim() === ''}
+                        sx={{
+                            bgcolor: '#9147ff',
+                            '&:hover': {
+                                bgcolor: '#772ce8',
+                            },
+                            '&.Mui-disabled': {
+                                bgcolor: 'rgba(145, 71, 255, 0.2)',
+                            }
+                        }}
+                    >
+                        {isSaving ? (
+                            <CircularProgress size={20} sx={{ color: '#fff' }} />
+                        ) : (
+                            feedback ? '업데이트' : '저장'
+                        )}
+                    </Button>
+                )}
+            </Box>
+        </Box>
+    );
 };
 
 // SloganSection 컴포넌트
@@ -301,12 +469,53 @@ export default function Home() {
     const [activeTimerSessionId, setActiveTimerSessionId] = useState<string | null>(null);
     const [slogans, setSlogans] = useState<Array<Slogan>>([]);
     const [loadingSlogans, setLoadingSlogans] = useState<boolean>(false);
+    const [feedback, setFeedback] = useState<Feedback | null>(null);
+    const [loadingFeedback, setLoadingFeedback] = useState<boolean>(false);
 
     useEffect(() => {
         if (!loading && !user) {
             router.push('/login');
         }
     }, [user, loading, router]);
+
+    // 선택된 날짜의 피드백 가져오기
+    useEffect(() => {
+        const fetchFeedback = async () => {
+            if (!user || !selectedDate) return;
+
+            try {
+                setLoadingFeedback(true);
+                setFeedback(null);
+
+                const dateStr = selectedDate.format('YYYY-MM-DD');
+                const feedbackRef = collection(db, 'userFeedback', user.uid, 'daily');
+                const q = query(feedbackRef, where('date', '==', dateStr));
+
+                const querySnapshot = await getDocs(q);
+
+                if (!querySnapshot.empty) {
+                    const doc = querySnapshot.docs[0];
+                    const data = doc.data();
+
+                    setFeedback({
+                        id: doc.id,
+                        content: data.content,
+                        date: new Date(data.date),
+                        createdAt: data.createdAt?.toDate() || new Date(),
+                        userId: data.userId
+                    });
+                }
+            } catch (error) {
+                console.error('피드백 조회 오류:', error);
+            } finally {
+                setLoadingFeedback(false);
+            }
+        };
+
+        if (open) {
+            fetchFeedback();
+        }
+    }, [user, selectedDate, open]);
 
     // 슬로건 가져오기
     useEffect(() => {
@@ -745,6 +954,14 @@ export default function Home() {
                             </Typography>
                         </Box>
                     )}
+                    {/* 피드백 섹션 추가 */}
+                    <FeedbackSection
+                        user={user}
+                        selectedDate={selectedDate}
+                        feedback={feedback}
+                        setFeedback={setFeedback}
+                        isLoading={loadingFeedback}
+                    />
                 </DialogContent>
                 <DialogActions sx={{ borderTop: '1px solid rgba(145, 71, 255, 0.2)', px: 3, py: 2 }}>
                     <Button onClick={handleClose} color="secondary">
