@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Box, Typography, Button, LinearProgress, IconButton } from '@mui/material';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import PauseIcon from '@mui/icons-material/Pause';
@@ -19,11 +19,19 @@ const TrainingTimer = ({ duration, sessionName, onComplete }: TrainingTimerProps
     const [progress, setProgress] = useState(100);
     const totalTime = useRef(0);
     const audioRef = useRef<HTMLAudioElement | null>(null);
+    const onCompleteRef = useRef(onComplete);
+
+    // onComplete props가 변경될 때마다 ref 업데이트
+    useEffect(() => {
+        onCompleteRef.current = onComplete;
+    }, [onComplete]);
 
     // 컴포넌트가 마운트될 때 초기화
     useEffect(() => {
         // 오디오 요소 생성
         audioRef.current = new Audio('/alarm.mp3');
+        // 추가: 오디오 미리 로드
+        audioRef.current.load();
 
         // 타이머 초기화
         const initialTime = duration * 60;
@@ -33,11 +41,30 @@ const TrainingTimer = ({ duration, sessionName, onComplete }: TrainingTimerProps
         return () => {
             // 컴포넌트 언마운트 시 오디오 정리
             if (audioRef.current) {
-                audioRef.current.pause();
-                audioRef.current = null;
+                // 재생 중인 경우에만 pause 호출
+                try {
+                    const audio = audioRef.current;
+                    if (!audio.paused) {
+                        audio.pause();
+                    }
+                    audioRef.current = null;
+                } catch (err) {
+                    console.error('오디오 정리 중 오류:', err);
+                }
             }
         };
     }, [duration]);
+
+    // 타이머 완료 처리를 위한 함수
+    const handleTimerEnd = useCallback(() => {
+        playAlarm();
+        // 오디오 재생과 콜백 실행 사이에 짧은 지연 추가
+        setTimeout(() => {
+            if (onCompleteRef.current) {
+                onCompleteRef.current();
+            }
+        }, 100); // 100ms 지연으로 오디오 재생이 시작될 시간 확보
+    }, []);
 
     useEffect(() => {
         let timer: NodeJS.Timeout | null = null;
@@ -49,8 +76,7 @@ const TrainingTimer = ({ duration, sessionName, onComplete }: TrainingTimerProps
                         // 타이머 종료
                         clearInterval(timer!);
                         setIsRunning(false);
-                        playAlarm();
-                        onComplete();
+                        handleTimerEnd(); // 수정: 별도의 함수로 분리
                         return 0;
                     }
 
@@ -65,12 +91,29 @@ const TrainingTimer = ({ duration, sessionName, onComplete }: TrainingTimerProps
         return () => {
             if (timer) clearInterval(timer);
         };
-    }, [isRunning, isPaused, onComplete]);
+    }, [isRunning, isPaused, handleTimerEnd]);
 
     const playAlarm = () => {
         if (audioRef.current) {
-            audioRef.current.currentTime = 0;
-            audioRef.current.play().catch(err => console.error('오디오 재생 오류:', err));
+            try {
+                audioRef.current.currentTime = 0;
+
+                // 플레이 상태 확인 및 에러 처리 추가
+                const playPromise = audioRef.current.play();
+
+                if (playPromise !== undefined) {
+                    playPromise
+                        .then(() => {
+                            // 재생 성공
+                        })
+                        .catch(error => {
+                            // 브라우저에서 자동 재생이 차단되었거나 다른 오류 발생
+                            console.log('오디오 재생 오류 (무시 가능):', error);
+                        });
+                }
+            } catch (err) {
+                console.error('오디오 처리 오류:', err);
+            }
         }
     };
 

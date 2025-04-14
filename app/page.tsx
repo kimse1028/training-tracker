@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import {useCallback, useEffect, useState} from 'react';
 import { useRouter } from 'next/navigation';
 import {
     Box,
@@ -126,13 +126,16 @@ export default function Home() {
         }
     }, [selectedDate, trainingSessions]);
 
-    const handleTimerComplete = () => {
+    const handleTimerComplete = useCallback(() => {
         // 타이머가 완료되면 자동으로 훈련을 완료 상태로 변경
         if (activeTimerSessionId) {
-            handleCheckSession(activeTimerSessionId, true);
-            setActiveTimerSessionId(null);
+            // 상태 업데이트를 setTimeout으로 감싸서 렌더링 사이클 외부에서 실행
+            setTimeout(() => {
+                handleCheckSession(activeTimerSessionId, true);
+                setActiveTimerSessionId(null);
+            }, 0);
         }
-    };
+    }, [activeTimerSessionId]);
 
     const handleDateSelect = (date: Dayjs) => {
         setSelectedDate(date);
@@ -313,7 +316,7 @@ export default function Home() {
                                     key={session.id}
                                     sx={{
                                         p: 2,
-                                        mb: 2,
+                                        mt: 2,
                                         borderLeft: '4px solid #9147ff',
                                         transition: 'all 0.2s',
                                         ...(session.completed && {
