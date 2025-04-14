@@ -9,7 +9,6 @@ import {
     Typography
 } from '@mui/material';
 import { useAuth } from '@/context/AuthContext';
-import NewTrainingForm from '@/components/NewTrainingForm';
 import NewSloganForm from "@/components/NewSloganForm";
 
 export default function AddSloganPage() {

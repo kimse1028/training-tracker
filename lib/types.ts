@@ -21,7 +21,6 @@ export interface TrainingSession {
 /**
  * Firestore에서 가져온 원시 훈련 세션 데이터의 타입 정의
  */
-// /lib/types.ts 수정
 export interface FirestoreTrainingSession {
     name: string;
     content: string;

@@ -789,33 +789,7 @@ export default function Home() {
         }
     }, [selectedDate, trainingSessions]);
 
-    const handleTimerComplete = useCallback(() => {
-        if (activeTimerSessionId) {
-            setTimeout(() => {
-                handleCheckSession(activeTimerSessionId, true);
-                setActiveTimerSessionId(null);
-            }, 0);
-        }
-    }, [activeTimerSessionId]);
-
-    const handleDateSelect = (date: Dayjs) => {
-        setSelectedDate(date);
-        setOpen(true);
-    };
-
-    const handleClose = () => {
-        setOpen(false);
-    };
-
-    const handleAddSlogan = () => {
-        router.push('/slogan/add');
-    };
-
-    const handleAddTrainingSession = () => {
-        router.push('/training/add');
-    };
-
-    const handleCheckSession = async (sessionId: string, completed: boolean) => {
+    const handleCheckSession = useCallback(async (sessionId: string, completed: boolean) => {
         try {
             if (!user) return;
 
@@ -866,6 +840,32 @@ export default function Home() {
         } catch (error) {
             console.error('훈련 세션 업데이트 처리 중 오류:', error);
         }
+    }, [user]);
+
+    const handleTimerComplete = useCallback(() => {
+        if (activeTimerSessionId) {
+            setTimeout(() => {
+                handleCheckSession(activeTimerSessionId, true);
+                setActiveTimerSessionId(null);
+            }, 0);
+        }
+    }, [activeTimerSessionId, handleCheckSession]);
+
+    const handleDateSelect = (date: Dayjs) => {
+        setSelectedDate(date);
+        setOpen(true);
+    };
+
+    const handleClose = () => {
+        setOpen(false);
+    };
+
+    const handleAddSlogan = () => {
+        router.push('/slogan/add');
+    };
+
+    const handleAddTrainingSession = () => {
+        router.push('/training/add');
     };
 
     if (loading) {
