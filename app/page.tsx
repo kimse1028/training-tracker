@@ -1,6 +1,6 @@
 'use client';
 
-import {useCallback, useEffect, useState} from 'react';
+import {Dispatch, SetStateAction, useCallback, useEffect, useState} from 'react';
 import { useRouter } from 'next/navigation';
 import {
     Box,
@@ -14,9 +14,13 @@ import {
     DialogContent,
     DialogActions,
     Checkbox,
-    FormControlLabel, Card, CardContent
+    FormControlLabel,
+    Card,
+    CardContent
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
+import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
+import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import dayjs, { Dayjs } from 'dayjs';
 import 'dayjs/locale/ko';
 import { useAuth } from '@/context/AuthContext';
@@ -27,17 +31,185 @@ import {
     orderBy,
     getDocs,
     updateDoc,
-    doc, limit
+    doc,
+    limit,
+    writeBatch
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { TrainingSession, FirestoreTrainingSession } from '@/lib/types';
 import CustomCalendar from '@/components/CustomCalendar';
 import TrainingTimer from '@/components/TrainingTimer';
-import PlayArrowIcon from "@mui/icons-material/PlayArrow";
-
+import {User} from "firebase/auth";
 
 // 로케일 설정
 dayjs.locale('ko');
+
+
+// Slogan 타입 정의
+type Slogan = {
+    id: string;
+    content: string;
+    createdAt: Date;
+    priority: number;
+};
+
+// SloganSection props 타입 정의
+type SloganSectionProps = {
+    user: User;
+    loadingSlogans: boolean;
+    slogans: Slogan[];
+    setSlogans: Dispatch<SetStateAction<Slogan[]>>;
+};
+
+// SloganSection 컴포넌트
+const SloganSection = ({ user, loadingSlogans, slogans, setSlogans }: SloganSectionProps) => {
+    const [draggedItem, setDraggedItem] = useState<number | null>(null);
+    const [isDragging, setIsDragging] = useState<boolean>(false);
+
+    const handleDragStart = (e: React.DragEvent<HTMLDivElement>, index: number) => {
+        setDraggedItem(index);
+        setIsDragging(true);
+        e.currentTarget.style.opacity = '0.4';
+
+        const dragImage = e.currentTarget.cloneNode(true) as HTMLElement;
+        dragImage.style.position = 'absolute';
+        dragImage.style.top = '-1000px';
+        document.body.appendChild(dragImage);
+        e.dataTransfer.setDragImage(dragImage, 0, 0);
+        setTimeout(() => document.body.removeChild(dragImage), 0);
+    };
+
+    const handleDragOver = (e: React.DragEvent<HTMLDivElement>, index: number) => {
+        e.preventDefault();
+        e.currentTarget.style.transform =
+            index < draggedItem! ? 'translateY(-8px)' : 'translateY(8px)';
+    };
+
+    const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+        e.currentTarget.style.transform = 'translateY(0)';
+    };
+
+    const handleDragEnd = (e: React.DragEvent<HTMLDivElement>) => {
+        setIsDragging(false);
+        e.currentTarget.style.opacity = '1';
+        document.querySelectorAll<HTMLElement>('.slogan-card').forEach(card => {
+            card.style.transform = 'translateY(0)';
+        });
+    };
+
+    const handleDrop = async (e: React.DragEvent<HTMLDivElement>, dropIndex: number) => {
+        e.preventDefault();
+        const dragIndex = draggedItem;
+        if (dragIndex === dropIndex || dragIndex === null) return;
+
+        try {
+            const newSlogans = [...slogans];
+            const [removed] = newSlogans.splice(dragIndex, 1);
+            newSlogans.splice(dropIndex, 0, removed);
+
+            const updatedSlogans = newSlogans.map((slogan, index) => ({
+                ...slogan,
+                priority: newSlogans.length - index
+            }));
+
+            const batch = writeBatch(db);
+            updatedSlogans.forEach((slogan) => {
+                const sloganRef = doc(db, 'UserSlogan', user.uid, 'slogans', slogan.id);
+                batch.update(sloganRef, { priority: slogan.priority });
+            });
+            await batch.commit();
+
+            setSlogans(updatedSlogans);
+        } catch (error) {
+            console.error('슬로건 우선순위 업데이트 실패:', error);
+        }
+
+        document.querySelectorAll<HTMLElement>('.slogan-card').forEach(card => {
+            card.style.transform = 'translateY(0)';
+        });
+    };
+
+    if (loadingSlogans) {
+        return (
+            <Box sx={{ display: 'flex', justifyContent: 'center', my: 3 }}>
+                <CircularProgress size={32} sx={{ color: '#9147ff' }} />
+            </Box>
+        );
+    }
+
+    return slogans.length > 0 ? (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            {slogans.map((slogan, index) => (
+                <Card
+                    key={slogan.id}
+                    className="slogan-card"
+                    draggable
+                    onDragStart={(e) => handleDragStart(e, index)}
+                    onDragOver={(e) => handleDragOver(e, index)}
+                    onDragLeave={handleDragLeave}
+                    onDragEnd={handleDragEnd}
+                    onDrop={(e) => handleDrop(e, index)}
+                    sx={{
+                        bgcolor: 'rgba(145, 71, 255, 0.03)',
+                        border: '1px solid rgba(145, 71, 255, 0.1)',
+                        borderRadius: 2,
+                        transition: 'all 0.2s ease-in-out',
+                        cursor: 'grab',
+                        '&:hover': {
+                            transform: isDragging ? 'none' : 'translateY(-2px)',
+                            bgcolor: 'rgba(145, 71, 255, 0.08)',
+                            boxShadow: '0 4px 12px rgba(145, 71, 255, 0.15)'
+                        },
+                        '&:active': {
+                            cursor: 'grabbing'
+                        }
+                    }}
+                >
+                    <CardContent sx={{ p: 3 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                            <DragIndicatorIcon
+                                sx={{
+                                    color: '#9147ff',
+                                    opacity: 0.7,
+                                    cursor: 'grab'
+                                }}
+                            />
+                            <Box sx={{ flex: 1 }}>
+                                <Typography
+                                    sx={{
+                                        color: '#efeff1',
+                                        fontSize: '1.1rem',
+                                        fontWeight: 500,
+                                        lineHeight: 1.5
+                                    }}
+                                >
+                                    {slogan.content}
+                                </Typography>
+                                <Typography
+                                    variant="caption"
+                                    sx={{
+                                        color: '#adadb8',
+                                        mt: 2,
+                                        display: 'block',
+                                        fontSize: '0.85rem'
+                                    }}
+                                >
+                                    {dayjs(slogan.createdAt).format('YYYY년 MM월 DD일')}
+                                </Typography>
+                            </Box>
+                        </Box>
+                    </CardContent>
+                </Card>
+            ))}
+        </Box>
+    ) : (
+        <Box sx={{ textAlign: 'center', py: 4 }}>
+            <Typography sx={{ color: '#adadb8', fontSize: '1rem', fontWeight: 500 }}>
+                등록된 슬로건이 없습니다.
+            </Typography>
+        </Box>
+    );
+};
 
 export default function Home() {
     const { user, loading, logout } = useAuth();
@@ -48,7 +220,7 @@ export default function Home() {
     const [open, setOpen] = useState<boolean>(false);
     const [sessionsForSelectedDate, setSessionsForSelectedDate] = useState<TrainingSession[]>([]);
     const [activeTimerSessionId, setActiveTimerSessionId] = useState<string | null>(null);
-    const [slogans, setSlogans] = useState<Array<{id: string, content: string, createdAt: Date}>>([]);
+    const [slogans, setSlogans] = useState<Array<Slogan>>([]);
     const [loadingSlogans, setLoadingSlogans] = useState<boolean>(false);
 
     useEffect(() => {
@@ -65,13 +237,19 @@ export default function Home() {
             try {
                 setLoadingSlogans(true);
                 const slogansRef = collection(db, 'UserSlogan', user.uid, 'slogans');
-                const q = query(slogansRef, orderBy('createdAt', 'desc'), limit(3)); // 최근 3개만 가져오기
+                const q = query(
+                    slogansRef,
+                    orderBy('priority', 'desc'),
+                    orderBy('createdAt', 'desc'),
+                    limit(3)
+                );
 
                 const querySnapshot = await getDocs(q);
                 const sloganData = querySnapshot.docs.map(doc => ({
                     id: doc.id,
                     content: doc.data().content,
-                    createdAt: doc.data().createdAt?.toDate() || new Date()
+                    createdAt: doc.data().createdAt?.toDate() || new Date(),
+                    priority: doc.data().priority || 0
                 }));
 
                 setSlogans(sloganData);
@@ -85,15 +263,13 @@ export default function Home() {
         fetchSlogans();
     }, [user]);
 
-    // 사용자의 훈련 세션 가져오기
+    // 훈련 세션 가져오기
     useEffect(() => {
         const fetchTrainingSessions = async () => {
             if (!user) return;
 
             try {
                 setLoadingSessions(true);
-
-                // 새로운 구조: trainingSessions/{userID}/sessions
                 const sessionsRef = collection(db, 'trainingSessions', user.uid, 'sessions');
                 const q = query(sessionsRef, orderBy('createdAt', 'desc'));
 
@@ -112,7 +288,6 @@ export default function Home() {
             } catch (error) {
                 console.error('훈련 세션 조회 오류:', error);
 
-                // 혹시 기존 구조에 데이터가 있다면 레거시 데이터도 조회 시도
                 try {
                     const legacyQuery = query(
                         collection(db, 'trainingSessions'),
@@ -143,7 +318,6 @@ export default function Home() {
         fetchTrainingSessions();
     }, [user]);
 
-    // 선택한 날짜에 대한 세션 필터링
     useEffect(() => {
         if (selectedDate && trainingSessions.length > 0) {
             const filteredSessions = trainingSessions.filter(session =>
@@ -156,9 +330,7 @@ export default function Home() {
     }, [selectedDate, trainingSessions]);
 
     const handleTimerComplete = useCallback(() => {
-        // 타이머가 완료되면 자동으로 훈련을 완료 상태로 변경
         if (activeTimerSessionId) {
-            // 상태 업데이트를 setTimeout으로 감싸서 렌더링 사이클 외부에서 실행
             setTimeout(() => {
                 handleCheckSession(activeTimerSessionId, true);
                 setActiveTimerSessionId(null);
@@ -177,7 +349,7 @@ export default function Home() {
 
     const handleAddSlogan = () => {
         router.push('/slogan/add');
-    }
+    };
 
     const handleAddTrainingSession = () => {
         router.push('/training/add');
@@ -187,7 +359,6 @@ export default function Home() {
         try {
             if (!user) return;
 
-            // 로컬 상태 먼저 업데이트 (사용자 경험 향상)
             setTrainingSessions(prev =>
                 prev.map(session =>
                     session.id === sessionId
@@ -204,16 +375,14 @@ export default function Home() {
                 )
             );
 
-            // 새 구조에서 세션 업데이트
             const sessionDocRef = doc(db, 'trainingSessions', user.uid, 'sessions', sessionId);
 
             try {
-                // 에러 발생 가능성이 있는 Firestore 작업을 try-catch로 별도 처리
                 const updateResult = await updateDoc(sessionDocRef, {
                     completed: completed
                 }).catch(error => {
                     console.error('새 경로에서 업데이트 오류:', error);
-                    throw error; // 다음 catch 블록으로 오류 전달
+                    throw error;
                 });
 
                 console.log('세션 업데이트 성공:', sessionId);
@@ -221,7 +390,6 @@ export default function Home() {
             } catch (error) {
                 console.warn('새 경로 업데이트 실패, 레거시 경로 시도... : ', error);
 
-                // 재시도: 잠시 대기 후 레거시 경로로 시도
                 await new Promise(resolve => setTimeout(resolve, 100));
 
                 try {
@@ -232,7 +400,6 @@ export default function Home() {
                     return legacyResult;
                 } catch (legacyError) {
                     console.error('레거시 경로 업데이트도 실패:', legacyError);
-                    // 실패해도 UI는 이미 업데이트됨 (낙관적 UI 업데이트)
                     throw legacyError;
                 }
             }
@@ -251,7 +418,7 @@ export default function Home() {
     }
 
     if (!user) {
-        return null; // 로딩 중이 아니고 사용자가 없으면 리디렉션 전에 빈 화면을 표시
+        return null;
     }
 
     return (
@@ -278,17 +445,32 @@ export default function Home() {
                     게임 훈련 세션을 관리하고 최고의 퍼포먼스를 달성하세요.
                 </Typography>
 
-                <Button
-                    variant="contained"
-                    color="primary"
-                    startIcon={<AddIcon />}
-                    onClick={handleAddSlogan}
-                    sx={{ mb: 4 }}
-                >
-                    새 슬로건 추가
-                </Button>
+                <Box sx={{ mb: 4, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
+                    <Button
+                        variant="contained"
+                        color="primary"
+                        startIcon={<AddIcon />}
+                        onClick={handleAddSlogan}
+                        disabled={slogans.length >= 3}
+                        sx={{
+                            opacity: slogans.length >= 3 ? 0.7 : 1,
+                        }}
+                    >
+                        새 슬로건 추가
+                    </Button>
+                    {slogans.length >= 3 && (
+                        <Typography
+                            variant="caption"
+                            sx={{
+                                color: '#ff8a80',
+                                textAlign: 'center'
+                            }}
+                        >
+                            슬로건은 최대 3개까지만 등록할 수 있습니다
+                        </Typography>
+                    )}
+                </Box>
 
-                {/* 슬로건 섹션 */}
                 <Paper
                     elevation={0}
                     sx={{
@@ -300,74 +482,14 @@ export default function Home() {
                         border: '1px solid rgba(145, 71, 255, 0.15)'
                     }}
                 >
-                    {loadingSlogans ? (
-                        <Box sx={{ display: 'flex', justifyContent: 'center', my: 3 }}>
-                            <CircularProgress size={32} sx={{ color: '#9147ff' }} />
-                        </Box>
-                    ) : slogans.length > 0 ? (
-                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                            {slogans.map((slogan) => (
-                                <Card
-                                    key={slogan.id}
-                                    sx={{
-                                        bgcolor: 'rgba(145, 71, 255, 0.03)',
-                                        border: '1px solid rgba(145, 71, 255, 0.1)',
-                                        borderRadius: 2,
-                                        transition: 'all 0.2s ease-in-out',
-                                        '&:hover': {
-                                            transform: 'translateY(-2px)',
-                                            bgcolor: 'rgba(145, 71, 255, 0.08)',
-                                            boxShadow: '0 4px 12px rgba(145, 71, 255, 0.15)'
-                                        }
-                                    }}
-                                >
-                                    <CardContent sx={{ p: 3 }}>
-                                        <Typography
-                                            sx={{
-                                                color: '#efeff1',
-                                                fontSize: '1.1rem',
-                                                fontWeight: 500,
-                                                lineHeight: 1.5
-                                            }}
-                                        >
-                                            {slogan.content}
-                                        </Typography>
-                                        <Typography
-                                            variant="caption"
-                                            sx={{
-                                                color: '#adadb8',
-                                                mt: 2,
-                                                display: 'block',
-                                                fontSize: '0.85rem'
-                                            }}
-                                        >
-                                            {dayjs(slogan.createdAt).format('YYYY년 MM월 DD일')}
-                                        </Typography>
-                                    </CardContent>
-                                </Card>
-                            ))}
-                        </Box>
-                    ) : (
-                        <Box
-                            sx={{
-                                textAlign: 'center',
-                                py: 4
-                            }}
-                        >
-                            <Typography
-                                sx={{
-                                    color: '#adadb8',
-                                    fontSize: '1rem',
-                                    fontWeight: 500
-                                }}
-                            >
-                                등록된 슬로건이 없습니다.
-                            </Typography>
-                        </Box>
-                    )}
+                    <SloganSection
+                        user={user}
+                        loadingSlogans={loadingSlogans}
+                        slogans={slogans}
+                        setSlogans={setSlogans}
+                    />
                 </Paper>
 
-                {/* 커스텀 달력 */}
                 <Paper sx={{ p: 3, mb: 4, width: '100%' }}>
                     {loadingSessions ? (
                         <Box sx={{ display: 'flex', justifyContent: 'center', my: 4 }}>
@@ -393,7 +515,6 @@ export default function Home() {
                 </Button>
             </Box>
 
-            {/* 선택한 날짜의 훈련 세션 다이얼로그 */}
             <Dialog
                 open={open}
                 onClose={handleClose}
@@ -416,7 +537,6 @@ export default function Home() {
                     <Box>
                         {selectedDate && selectedDate.format('YYYY년 MM월 DD일')}의 훈련
 
-                        {/* 과거 날짜 표시 추가 */}
                         {selectedDate && selectedDate.isBefore(dayjs(), 'day') && (
                             <Typography variant="caption" sx={{ display: 'block', color: '#ff8a80', mt: 1 }}>
                                 과거 훈련 기록은 수정할 수 없습니다.
@@ -424,7 +544,6 @@ export default function Home() {
                         )}
                     </Box>
 
-                    {/* 과거 날짜가 아닐 때만 새 훈련 추가 버튼 표시 */}
                     {(!selectedDate || !selectedDate.isBefore(dayjs(), 'day')) && (
                         <Button
                             variant="outlined"
@@ -460,7 +579,7 @@ export default function Home() {
                                                 <Checkbox
                                                     checked={session.completed || false}
                                                     onChange={(e) => handleCheckSession(session.id, e.target.checked)}
-                                                    disabled={selectedDate && selectedDate.isBefore(dayjs(), 'day')} // 과거 날짜는 비활성화
+                                                    disabled={selectedDate && selectedDate.isBefore(dayjs(), 'day')}
                                                     sx={{
                                                         color: '#9147ff',
                                                         '&.Mui-checked': {
@@ -508,7 +627,6 @@ export default function Home() {
                                         </Typography>
                                     </Box>
 
-                                    {/* 타이머 추가 */}
                                     {activeTimerSessionId === session.id && (
                                         <TrainingTimer
                                             key={`timer-${session.id}`}
