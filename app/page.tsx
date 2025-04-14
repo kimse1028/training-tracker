@@ -14,7 +14,7 @@ import {
     DialogContent,
     DialogActions,
     Checkbox,
-    FormControlLabel
+    FormControlLabel, Card, CardContent
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import dayjs, { Dayjs } from 'dayjs';
@@ -27,7 +27,7 @@ import {
     orderBy,
     getDocs,
     updateDoc,
-    doc
+    doc, limit
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { TrainingSession, FirestoreTrainingSession } from '@/lib/types';
@@ -48,13 +48,42 @@ export default function Home() {
     const [open, setOpen] = useState<boolean>(false);
     const [sessionsForSelectedDate, setSessionsForSelectedDate] = useState<TrainingSession[]>([]);
     const [activeTimerSessionId, setActiveTimerSessionId] = useState<string | null>(null);
-
+    const [slogans, setSlogans] = useState<Array<{id: string, content: string, createdAt: Date}>>([]);
+    const [loadingSlogans, setLoadingSlogans] = useState<boolean>(false);
 
     useEffect(() => {
         if (!loading && !user) {
             router.push('/login');
         }
     }, [user, loading, router]);
+
+    // 슬로건 가져오기
+    useEffect(() => {
+        const fetchSlogans = async () => {
+            if (!user) return;
+
+            try {
+                setLoadingSlogans(true);
+                const slogansRef = collection(db, 'UserSlogan', user.uid, 'slogans');
+                const q = query(slogansRef, orderBy('createdAt', 'desc'), limit(3)); // 최근 3개만 가져오기
+
+                const querySnapshot = await getDocs(q);
+                const sloganData = querySnapshot.docs.map(doc => ({
+                    id: doc.id,
+                    content: doc.data().content,
+                    createdAt: doc.data().createdAt?.toDate() || new Date()
+                }));
+
+                setSlogans(sloganData);
+            } catch (error) {
+                console.error('슬로건 조회 오류:', error);
+            } finally {
+                setLoadingSlogans(false);
+            }
+        };
+
+        fetchSlogans();
+    }, [user]);
 
     // 사용자의 훈련 세션 가져오기
     useEffect(() => {
@@ -258,6 +287,85 @@ export default function Home() {
                 >
                     새 슬로건 추가
                 </Button>
+
+                {/* 슬로건 섹션 */}
+                <Paper
+                    elevation={0}
+                    sx={{
+                        width: '100%',
+                        mb: 4,
+                        p: 4,
+                        bgcolor: 'rgba(145, 71, 255, 0.08)',
+                        borderRadius: 3,
+                        border: '1px solid rgba(145, 71, 255, 0.15)'
+                    }}
+                >
+                    {loadingSlogans ? (
+                        <Box sx={{ display: 'flex', justifyContent: 'center', my: 3 }}>
+                            <CircularProgress size={32} sx={{ color: '#9147ff' }} />
+                        </Box>
+                    ) : slogans.length > 0 ? (
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                            {slogans.map((slogan) => (
+                                <Card
+                                    key={slogan.id}
+                                    sx={{
+                                        bgcolor: 'rgba(145, 71, 255, 0.03)',
+                                        border: '1px solid rgba(145, 71, 255, 0.1)',
+                                        borderRadius: 2,
+                                        transition: 'all 0.2s ease-in-out',
+                                        '&:hover': {
+                                            transform: 'translateY(-2px)',
+                                            bgcolor: 'rgba(145, 71, 255, 0.08)',
+                                            boxShadow: '0 4px 12px rgba(145, 71, 255, 0.15)'
+                                        }
+                                    }}
+                                >
+                                    <CardContent sx={{ p: 3 }}>
+                                        <Typography
+                                            sx={{
+                                                color: '#efeff1',
+                                                fontSize: '1.1rem',
+                                                fontWeight: 500,
+                                                lineHeight: 1.5
+                                            }}
+                                        >
+                                            {slogan.content}
+                                        </Typography>
+                                        <Typography
+                                            variant="caption"
+                                            sx={{
+                                                color: '#adadb8',
+                                                mt: 2,
+                                                display: 'block',
+                                                fontSize: '0.85rem'
+                                            }}
+                                        >
+                                            {dayjs(slogan.createdAt).format('YYYY년 MM월 DD일')}
+                                        </Typography>
+                                    </CardContent>
+                                </Card>
+                            ))}
+                        </Box>
+                    ) : (
+                        <Box
+                            sx={{
+                                textAlign: 'center',
+                                py: 4
+                            }}
+                        >
+                            <Typography
+                                sx={{
+                                    color: '#adadb8',
+                                    fontSize: '1rem',
+                                    fontWeight: 500
+                                }}
+                            >
+                                등록된 슬로건이 없습니다.
+                            </Typography>
+                        </Box>
+                    )}
+                </Paper>
 
                 {/* 커스텀 달력 */}
                 <Paper sx={{ p: 3, mb: 4, width: '100%' }}>
