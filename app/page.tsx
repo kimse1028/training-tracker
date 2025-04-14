@@ -614,7 +614,7 @@ export default function Home() {
                     alignItems: 'center'
                 }}>
                     <Box>
-                        {selectedDate && selectedDate.format('YYYY년 MM월 DD일')}의 훈련
+                        {selectedDate && selectedDate.format('YYYY년 MM월 DD일')}
 
                         {selectedDate && selectedDate.isBefore(dayjs(), 'day') && (
                             <Typography variant="caption" sx={{ display: 'block', color: '#ff8a80', mt: 1 }}>
