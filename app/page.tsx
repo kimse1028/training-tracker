@@ -1,6 +1,6 @@
 'use client';
 
-import {Dispatch, SetStateAction, useCallback, useEffect, useState} from 'react';
+import React, { Dispatch, SetStateAction, useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
     Box,
@@ -32,6 +32,7 @@ import {
     getDocs,
     updateDoc,
     doc,
+    deleteDoc,
     limit,
     writeBatch
 } from 'firebase/firestore';
@@ -40,7 +41,6 @@ import { TrainingSession, FirestoreTrainingSession } from '@/lib/types';
 import CustomCalendar from '@/components/CustomCalendar';
 import TrainingTimer from '@/components/TrainingTimer';
 import {User} from "firebase/auth";
-
 // 로케일 설정
 dayjs.locale('ko');
 
@@ -65,6 +65,38 @@ type SloganSectionProps = {
 const SloganSection = ({ user, loadingSlogans, slogans, setSlogans }: SloganSectionProps) => {
     const [draggedItem, setDraggedItem] = useState<number | null>(null);
     const [isDragging, setIsDragging] = useState<boolean>(false);
+    const [deleteDialogOpen, setDeleteDialogOpen] = useState<boolean>(false);
+    const [selectedSloganId, setSelectedSloganId] = useState<string | null>(null);
+
+    // 삭제 다이얼로그 열기
+    const handleSloganClick = (sloganId: string) => {
+        if (isDragging) return;
+
+        setSelectedSloganId(sloganId);
+        setDeleteDialogOpen(true);
+    };
+
+    // 삭제 다이얼로그 닫기
+    const handleCloseDeleteDialog = () => {
+        setDeleteDialogOpen(false);
+        setSelectedSloganId(null);
+    };
+
+    // 슬로건 삭제 처리
+    const handleDeleteSlogan = async () => {
+        if (!selectedSloganId) return;
+
+        try {
+            const sloganRef = doc(db, 'UserSlogan', user.uid, 'slogans', selectedSloganId);
+            await deleteDoc(sloganRef);
+
+            // 상태 업데이트
+            setSlogans(prevSlogans => prevSlogans.filter(slogan => slogan.id !== selectedSloganId));
+            handleCloseDeleteDialog();
+        } catch (error) {
+            console.error('슬로건 삭제 오류:', error);
+        }
+    };
 
     const handleDragStart = (e: React.DragEvent<HTMLDivElement>, index: number) => {
         setDraggedItem(index);
@@ -137,77 +169,124 @@ const SloganSection = ({ user, loadingSlogans, slogans, setSlogans }: SloganSect
         );
     }
 
-    return slogans.length > 0 ? (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-            {slogans.map((slogan, index) => (
-                <Card
-                    key={slogan.id}
-                    className="slogan-card"
-                    draggable
-                    onDragStart={(e) => handleDragStart(e, index)}
-                    onDragOver={(e) => handleDragOver(e, index)}
-                    onDragLeave={handleDragLeave}
-                    onDragEnd={handleDragEnd}
-                    onDrop={(e) => handleDrop(e, index)}
-                    sx={{
-                        bgcolor: 'rgba(145, 71, 255, 0.03)',
-                        border: '1px solid rgba(145, 71, 255, 0.1)',
+    return (
+        <>
+            {slogans.length > 0 ? (
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                    {slogans.map((slogan, index) => (
+                        <Card
+                            key={slogan.id}
+                            className="slogan-card"
+                            draggable
+                            onClick={() => handleSloganClick(slogan.id)}
+                            onDragStart={(e) => handleDragStart(e, index)}
+                            onDragOver={(e) => handleDragOver(e, index)}
+                            onDragLeave={handleDragLeave}
+                            onDragEnd={handleDragEnd}
+                            onDrop={(e) => handleDrop(e, index)}
+                            sx={{
+                                bgcolor: 'rgba(145, 71, 255, 0.03)',
+                                border: '1px solid rgba(145, 71, 255, 0.1)',
+                                borderRadius: 2,
+                                transition: 'all 0.2s ease-in-out',
+                                cursor: 'grab',
+                                '&:hover': {
+                                    transform: isDragging ? 'none' : 'translateY(-2px)',
+                                    bgcolor: 'rgba(145, 71, 255, 0.08)',
+                                    boxShadow: '0 4px 12px rgba(145, 71, 255, 0.15)'
+                                },
+                                '&:active': {
+                                    cursor: 'grabbing'
+                                }
+                            }}
+                        >
+                            <CardContent sx={{ p: 3 }}>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                                    <DragIndicatorIcon
+                                        sx={{
+                                            color: '#9147ff',
+                                            opacity: 0.7,
+                                            cursor: 'grab'
+                                        }}
+                                    />
+                                    <Box sx={{ flex: 1 }}>
+                                        <Typography
+                                            sx={{
+                                                color: '#efeff1',
+                                                fontSize: '1.1rem',
+                                                fontWeight: 500,
+                                                lineHeight: 1.5
+                                            }}
+                                        >
+                                            {slogan.content}
+                                        </Typography>
+                                        <Typography
+                                            variant="caption"
+                                            sx={{
+                                                color: '#adadb8',
+                                                mt: 2,
+                                                display: 'block',
+                                                fontSize: '0.85rem'
+                                            }}
+                                        >
+                                            {dayjs(slogan.createdAt).format('YYYY년 MM월 DD일')}
+                                        </Typography>
+                                    </Box>
+                                </Box>
+                            </CardContent>
+                        </Card>
+                    ))}
+                </Box>
+            ) : (
+                <Box sx={{ textAlign: 'center', py: 4 }}>
+                    <Typography sx={{ color: '#adadb8', fontSize: '1rem', fontWeight: 500 }}>
+                        등록된 슬로건이 없습니다.
+                    </Typography>
+                </Box>
+            )}
+
+            {/* 삭제 확인 다이얼로그 */}
+            <Dialog
+                open={deleteDialogOpen}
+                onClose={handleCloseDeleteDialog}
+                PaperProps={{
+                    sx: {
                         borderRadius: 2,
-                        transition: 'all 0.2s ease-in-out',
-                        cursor: 'grab',
-                        '&:hover': {
-                            transform: isDragging ? 'none' : 'translateY(-2px)',
-                            bgcolor: 'rgba(145, 71, 255, 0.08)',
-                            boxShadow: '0 4px 12px rgba(145, 71, 255, 0.15)'
-                        },
-                        '&:active': {
-                            cursor: 'grabbing'
-                        }
-                    }}
-                >
-                    <CardContent sx={{ p: 3 }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                            <DragIndicatorIcon
-                                sx={{
-                                    color: '#9147ff',
-                                    opacity: 0.7,
-                                    cursor: 'grab'
-                                }}
-                            />
-                            <Box sx={{ flex: 1 }}>
-                                <Typography
-                                    sx={{
-                                        color: '#efeff1',
-                                        fontSize: '1.1rem',
-                                        fontWeight: 500,
-                                        lineHeight: 1.5
-                                    }}
-                                >
-                                    {slogan.content}
-                                </Typography>
-                                <Typography
-                                    variant="caption"
-                                    sx={{
-                                        color: '#adadb8',
-                                        mt: 2,
-                                        display: 'block',
-                                        fontSize: '0.85rem'
-                                    }}
-                                >
-                                    {dayjs(slogan.createdAt).format('YYYY년 MM월 DD일')}
-                                </Typography>
-                            </Box>
-                        </Box>
-                    </CardContent>
-                </Card>
-            ))}
-        </Box>
-    ) : (
-        <Box sx={{ textAlign: 'center', py: 4 }}>
-            <Typography sx={{ color: '#adadb8', fontSize: '1rem', fontWeight: 500 }}>
-                등록된 슬로건이 없습니다.
-            </Typography>
-        </Box>
+                        bgcolor: '#18181b',
+                        color: '#efeff1'
+                    }
+                }}
+            >
+                <DialogTitle sx={{ color: '#efeff1' }}>
+                    슬로건 삭제
+                </DialogTitle>
+                <DialogContent>
+                    <Typography sx={{ color: '#adadb8' }}>
+                        이 슬로건을 삭제하시겠습니까?
+                    </Typography>
+                </DialogContent>
+                <DialogActions sx={{ p: 2 }}>
+                    <Button
+                        onClick={handleCloseDeleteDialog}
+                        sx={{ color: '#adadb8' }}
+                    >
+                        취소
+                    </Button>
+                    <Button
+                        onClick={handleDeleteSlogan}
+                        variant="contained"
+                        sx={{
+                            bgcolor: '#dc3545',
+                            '&:hover': {
+                                bgcolor: '#c82333'
+                            }
+                        }}
+                    >
+                        삭제
+                    </Button>
+                </DialogActions>
+            </Dialog>
+        </>
     );
 };
 
