@@ -154,23 +154,7 @@ export default function Home() {
         try {
             if (!user) return;
 
-            // 새 구조에서 세션 업데이트
-            const sessionDocRef = doc(db, 'trainingSessions', user.uid, 'sessions', sessionId);
-
-            try {
-                // 새 경로에서 업데이트 시도
-                await updateDoc(sessionDocRef, {
-                    completed: completed
-                });
-            } catch (error) {
-                console.error('업데이트 오류:', error);
-                // 새 경로에서 실패할 경우 기존 경로로 시도 (레거시 지원)
-                await updateDoc(doc(db, 'trainingSessions', sessionId), {
-                    completed: completed
-                });
-            }
-
-            // 로컬 상태 업데이트
+            // 로컬 상태 먼저 업데이트 (사용자 경험 향상)
             setTrainingSessions(prev =>
                 prev.map(session =>
                     session.id === sessionId
@@ -186,8 +170,41 @@ export default function Home() {
                         : session
                 )
             );
+
+            // 새 구조에서 세션 업데이트
+            const sessionDocRef = doc(db, 'trainingSessions', user.uid, 'sessions', sessionId);
+
+            try {
+                // 에러 발생 가능성이 있는 Firestore 작업을 try-catch로 별도 처리
+                const updateResult = await updateDoc(sessionDocRef, {
+                    completed: completed
+                }).catch(error => {
+                    console.error('새 경로에서 업데이트 오류:', error);
+                    throw error; // 다음 catch 블록으로 오류 전달
+                });
+
+                console.log('세션 업데이트 성공:', sessionId);
+                return updateResult;
+            } catch (error) {
+                console.warn('새 경로 업데이트 실패, 레거시 경로 시도...');
+
+                // 재시도: 잠시 대기 후 레거시 경로로 시도
+                await new Promise(resolve => setTimeout(resolve, 100));
+
+                try {
+                    const legacyResult = await updateDoc(doc(db, 'trainingSessions', sessionId), {
+                        completed: completed
+                    });
+                    console.log('레거시 경로 세션 업데이트 성공:', sessionId);
+                    return legacyResult;
+                } catch (legacyError) {
+                    console.error('레거시 경로 업데이트도 실패:', legacyError);
+                    // 실패해도 UI는 이미 업데이트됨 (낙관적 UI 업데이트)
+                    throw legacyError;
+                }
+            }
         } catch (error) {
-            console.error('훈련 세션 업데이트 오류:', error);
+            console.error('훈련 세션 업데이트 처리 중 오류:', error);
         }
     };
 
