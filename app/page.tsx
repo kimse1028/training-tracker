@@ -88,7 +88,7 @@ const FeedbackSection = ({
     const [characterCount, setCharacterCount] = useState<number>(content.length || 0);
     const [successMessage, setSuccessMessage] = useState<string | null>(null);
     const [editMode, setEditMode] = useState<boolean>(false); // 수정 모드 상태 추가
-    const MAX_CHAR_COUNT = 1000;
+    const MAX_CHAR_COUNT = 200;
 
     useEffect(() => {
         if (feedback) {
@@ -253,7 +253,7 @@ const FeedbackSection = ({
                 rows={4}
                 value={content}
                 onChange={handleContentChange}
-                placeholder="오늘 훈련에 대한 피드백이나 생각을 남겨보세요. (최대 1000자)"
+                placeholder="오늘 훈련에 대한 피드백이나 생각을 남겨보세요. (최대 200자)"
                 disabled={Boolean(selectedDate.isBefore(dayjs(), 'day') || (feedback && !editMode))} // 수정 모드가 아니면 비활성화
                 InputProps={{
                     sx: {
@@ -608,12 +608,47 @@ export default function Home() {
     const [loadingSlogans, setLoadingSlogans] = useState<boolean>(false);
     const [feedback, setFeedback] = useState<Feedback | null>(null);
     const [loadingFeedback, setLoadingFeedback] = useState<boolean>(false);
+    const [feedbacks, setFeedbacks] = useState<Feedback[]>([]);
+    const [loadingAllFeedbacks, setLoadingAllFeedbacks] = useState<boolean>(false);
 
     useEffect(() => {
         if (!loading && !user) {
             router.push('/login');
         }
     }, [user, loading, router]);
+
+    // 모든 피드백 가져오기
+    useEffect(() => {
+        const fetchAllFeedbacks = async () => {
+            if (!user) return;
+
+            try {
+                setLoadingAllFeedbacks(true);
+                const feedbackRef = collection(db, 'userFeedback', user.uid, 'daily');
+                const querySnapshot = await getDocs(feedbackRef);
+
+                const feedbackData = querySnapshot.docs.map(doc => {
+                    const data = doc.data();
+                    return {
+                        id: doc.id,
+                        content: data.content,
+                        date: new Date(data.date),
+                        createdAt: data.createdAt?.toDate() || new Date(),
+                        userId: data.userId
+                    } as Feedback;
+                });
+
+                setFeedbacks(feedbackData);
+            } catch (error) {
+                console.error('모든 피드백 조회 오류:', error);
+            } finally {
+                setLoadingAllFeedbacks(false);
+            }
+        };
+
+        fetchAllFeedbacks();
+    }, [user]);
+
 
     // 선택된 날짜의 피드백 가져오기
     useEffect(() => {
@@ -916,13 +951,14 @@ export default function Home() {
                 </Paper>
 
                 <Paper sx={{ p: 3, mb: 4, width: '100%' }}>
-                    {loadingSessions ? (
+                    {loadingSessions || loadingAllFeedbacks ? (
                         <Box sx={{ display: 'flex', justifyContent: 'center', my: 4 }}>
                             <CircularProgress size={30} sx={{ color: '#9147ff' }} />
                         </Box>
                     ) : (
                         <CustomCalendar
                             trainingSessions={trainingSessions}
+                            feedbacks={feedbacks}
                             onDateSelect={handleDateSelect}
                         />
                     )}

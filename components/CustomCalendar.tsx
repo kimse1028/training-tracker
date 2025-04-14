@@ -10,6 +10,15 @@ import dayjs, { Dayjs } from 'dayjs';
 import 'dayjs/locale/ko';
 import { TrainingSession } from '@/lib/types';
 
+// Feedback 타입 정의
+interface Feedback {
+    id: string;
+    content: string;
+    date: Date;
+    createdAt: Date;
+    userId: string;
+}
+
 interface DayInfo {
     date: Dayjs;
     isCurrentMonth: boolean;
@@ -17,11 +26,12 @@ interface DayInfo {
 
 interface CustomCalendarProps {
     trainingSessions: TrainingSession[];
+    feedbacks?: Feedback[]; // 피드백 데이터 추가
     onDateSelect: (date: Dayjs) => void;
 }
 
 // 달력 컴포넌트
-const CustomCalendar = ({ trainingSessions, onDateSelect }: CustomCalendarProps) => {
+const CustomCalendar = ({ trainingSessions, feedbacks, onDateSelect }: CustomCalendarProps) => {
     const [currentMonth, setCurrentMonth] = useState<Dayjs>(dayjs());
     const [calendarDays, setCalendarDays] = useState<DayInfo[]>([]);
 
@@ -83,6 +93,15 @@ const CustomCalendar = ({ trainingSessions, onDateSelect }: CustomCalendarProps)
         );
     };
 
+    // 날짜에 대한 피드백 가져오는 함수 추가
+    const getFeedbackForDate = (date: Dayjs, feedbacks?: Feedback[]): Feedback | undefined => {
+        if (!feedbacks || feedbacks.length === 0) return undefined;
+
+        return feedbacks.find(feedback =>
+            dayjs(feedback.date).format('YYYY-MM-DD') === date.format('YYYY-MM-DD')
+        );
+    };
+
     // 요일 헤더
     const weekdays: string[] = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
 
@@ -136,6 +155,7 @@ const CustomCalendar = ({ trainingSessions, onDateSelect }: CustomCalendarProps)
                     {calendarDays.map((dayInfo, index) => {
                         const day = dayInfo.date;
                         const sessions = getSessionsForDate(day);
+                        const feedback = getFeedbackForDate(day, feedbacks);
                         const isToday = day.format('YYYY-MM-DD') === dayjs().format('YYYY-MM-DD');
                         const dayOfWeek = day.day(); // 0: 일요일, 6: 토요일
 
@@ -175,7 +195,7 @@ const CustomCalendar = ({ trainingSessions, onDateSelect }: CustomCalendarProps)
                                     {day.format('D')}
                                 </Box>
 
-                                {/* 훈련 세션 정보 */}
+                                {/* 훈련 세션과 피드백 정보 */}
                                 <Box sx={{ p: 1, pt: 3, height: '100%', overflow: 'hidden' }}>
                                     {sessions.map((session, idx) => (
                                         <Box key={idx} sx={{
@@ -190,6 +210,24 @@ const CustomCalendar = ({ trainingSessions, onDateSelect }: CustomCalendarProps)
                                             {session.name}
                                         </Box>
                                     ))}
+
+                                    {/* 피드백 내용 표시 */}
+                                    {feedback && (
+                                        <Box sx={{
+                                            fontSize: '0.7rem',
+                                            whiteSpace: 'nowrap',
+                                            overflow: 'hidden',
+                                            textOverflow: 'ellipsis',
+                                            mt: 0.5,
+                                            pt: 0.5,
+                                            borderTop: '1px dashed rgba(145, 71, 255, 0.2)',
+                                            color: '#888888',
+                                            fontStyle: 'italic'
+                                        }}>
+                                            📝 {feedback.content.substring(0, 15)}
+                                            {feedback.content.length > 15 ? '...' : ''}
+                                        </Box>
+                                    )}
                                 </Box>
                             </Box>
                         );
