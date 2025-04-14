@@ -69,7 +69,7 @@ type SloganSectionProps = {
     setSlogans: Dispatch<SetStateAction<Slogan[]>>;
 };
 
-// 피드백 섹션 UI 컴포넌트
+// 피드백 섹션 컴포넌트
 const FeedbackSection = ({
                              user,
                              selectedDate,
@@ -86,15 +86,19 @@ const FeedbackSection = ({
     const [content, setContent] = useState<string>(feedback?.content || '');
     const [isSaving, setIsSaving] = useState<boolean>(false);
     const [characterCount, setCharacterCount] = useState<number>(content.length || 0);
+    const [successMessage, setSuccessMessage] = useState<string | null>(null);
+    const [editMode, setEditMode] = useState<boolean>(false); // 수정 모드 상태 추가
     const MAX_CHAR_COUNT = 1000;
 
     useEffect(() => {
         if (feedback) {
             setContent(feedback.content);
             setCharacterCount(feedback.content.length);
+            setEditMode(false); // 피드백이 로드될 때 수정 모드 비활성화
         } else {
             setContent('');
             setCharacterCount(0);
+            setEditMode(true); // 새 피드백인 경우 수정 모드 활성화
         }
     }, [feedback]);
 
@@ -130,10 +134,12 @@ const FeedbackSection = ({
                 // 기존 피드백 업데이트
                 docId = querySnapshot.docs[0].id;
                 await updateDoc(doc(db, 'userFeedback', user.uid, 'daily', docId), newFeedback);
+                setSuccessMessage("피드백이 업데이트되었습니다.");
             } else {
                 // 새 피드백 생성
                 const docRef = await addDoc(collection(db, 'userFeedback', user.uid, 'daily'), newFeedback);
                 docId = docRef.id;
+                setSuccessMessage("새 피드백이 등록되었습니다.");
             }
 
             setFeedback({
@@ -143,11 +149,22 @@ const FeedbackSection = ({
                 createdAt: new Date()
             });
 
+            // 저장 후 수정 모드 비활성화
+            setEditMode(false);
+
+            // 3초 후 메시지 사라짐
+            setTimeout(() => setSuccessMessage(null), 3000);
+
         } catch (error) {
             console.error('피드백 저장 오류:', error);
         } finally {
             setIsSaving(false);
         }
+    };
+
+    // 수정 모드 활성화 함수
+    const enableEditMode = () => {
+        setEditMode(true);
     };
 
     if (isLoading) {
@@ -160,9 +177,75 @@ const FeedbackSection = ({
 
     return (
         <Box sx={{ mt: 4, borderTop: '1px solid rgba(145, 71, 255, 0.2)', pt: 3 }}>
-            <Typography variant="h6" sx={{ mb: 2, color: '#efeff1' }}>
-                오늘의 피드백
-            </Typography>
+            {/* 제목과 상태 뱃지 */}
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                <Typography variant="h6" sx={{ color: '#efeff1' }}>
+                    오늘의 피드백
+                </Typography>
+
+                {feedback && !editMode && (
+                    <Box
+                        component="span"
+                        sx={{
+                            ml: 2,
+                            px: 1.5,
+                            py: 0.5,
+                            borderRadius: 1,
+                            fontSize: '0.75rem',
+                            bgcolor: 'rgba(0, 181, 173, 0.1)',
+                            color: '#00b5ad',
+                            border: '1px solid rgba(0, 181, 173, 0.3)'
+                        }}
+                    >
+                        저장됨
+                    </Box>
+                )}
+
+                {feedback && editMode && (
+                    <Box
+                        component="span"
+                        sx={{
+                            ml: 2,
+                            px: 1.5,
+                            py: 0.5,
+                            borderRadius: 1,
+                            fontSize: '0.75rem',
+                            bgcolor: 'rgba(145, 71, 255, 0.1)',
+                            color: '#9147ff',
+                            border: '1px solid rgba(145, 71, 255, 0.3)'
+                        }}
+                    >
+                        수정 중
+                    </Box>
+                )}
+            </Box>
+
+            {/* 성공 메시지 */}
+            {successMessage && (
+                <Box sx={{
+                    mb: 2,
+                    p: 1.5,
+                    bgcolor: 'rgba(0, 181, 173, 0.1)',
+                    borderRadius: 1,
+                    border: '1px solid rgba(0, 181, 173, 0.3)',
+                    color: '#00b5ad',
+                    fontWeight: 500,
+                    display: 'flex',
+                    alignItems: 'center'
+                }}>
+                    <Box sx={{ mr: 1, display: 'flex', alignItems: 'center' }}>
+                        ✓
+                    </Box>
+                    {successMessage}
+                </Box>
+            )}
+
+            {/* 최종 수정 시간 */}
+            {feedback && (
+                <Typography variant="caption" sx={{ color: '#adadb8', mb: 2, display: 'block' }}>
+                    마지막 수정: {dayjs(feedback.createdAt).format('YYYY년 MM월 DD일 HH:mm')}
+                </Typography>
+            )}
 
             <TextField
                 multiline
@@ -171,7 +254,7 @@ const FeedbackSection = ({
                 value={content}
                 onChange={handleContentChange}
                 placeholder="오늘 훈련에 대한 피드백이나 생각을 남겨보세요. (최대 1000자)"
-                disabled={selectedDate.isBefore(dayjs(), 'day')}
+                disabled={Boolean(selectedDate.isBefore(dayjs(), 'day') || (feedback && !editMode))} // 수정 모드가 아니면 비활성화
                 InputProps={{
                     sx: {
                         color: '#efeff1',
@@ -183,14 +266,21 @@ const FeedbackSection = ({
                 sx={{
                     '& .MuiOutlinedInput-root': {
                         '& fieldset': {
-                            borderColor: 'rgba(145, 71, 255, 0.3)',
+                            borderColor: feedback && !editMode
+                                ? 'rgba(0, 181, 173, 0.3)'
+                                : 'rgba(145, 71, 255, 0.3)',
                         },
                         '&:hover fieldset': {
-                            borderColor: 'rgba(145, 71, 255, 0.5)',
+                            borderColor: feedback && !editMode
+                                ? 'rgba(0, 181, 173, 0.5)'
+                                : 'rgba(145, 71, 255, 0.5)',
                         },
                         '&.Mui-focused fieldset': {
-                            borderColor: '#9147ff',
+                            borderColor: feedback && !editMode ? '#00b5ad' : '#9147ff',
                         },
+                        ...(feedback && !editMode && {
+                            bgcolor: 'rgba(0, 181, 173, 0.03)',
+                        }),
                     },
                 }}
             />
@@ -201,28 +291,75 @@ const FeedbackSection = ({
                 </Typography>
 
                 {!selectedDate.isBefore(dayjs(), 'day') && (
-                    <Button
-                        variant="contained"
-                        color="primary"
-                        size="small"
-                        onClick={saveFeedback}
-                        disabled={isSaving || content.trim() === ''}
-                        sx={{
-                            bgcolor: '#9147ff',
-                            '&:hover': {
-                                bgcolor: '#772ce8',
-                            },
-                            '&.Mui-disabled': {
-                                bgcolor: 'rgba(145, 71, 255, 0.2)',
-                            }
-                        }}
-                    >
-                        {isSaving ? (
-                            <CircularProgress size={20} sx={{ color: '#fff' }} />
+                    feedback ? (
+                        // 피드백이 있는 경우: 수정/업데이트 버튼
+                        editMode ? (
+                            // 수정 모드일 때는 업데이트 버튼
+                            <Button
+                                variant="contained"
+                                color="primary"
+                                size="small"
+                                onClick={saveFeedback}
+                                disabled={isSaving || content.trim() === ''}
+                                sx={{
+                                    bgcolor: '#9147ff',
+                                    '&:hover': {
+                                        bgcolor: '#772ce8',
+                                    },
+                                    '&.Mui-disabled': {
+                                        bgcolor: 'rgba(145, 71, 255, 0.2)',
+                                    }
+                                }}
+                            >
+                                {isSaving ? (
+                                    <CircularProgress size={20} sx={{ color: '#fff' }} />
+                                ) : (
+                                    '업데이트'
+                                )}
+                            </Button>
                         ) : (
-                            feedback ? '업데이트' : '저장'
-                        )}
-                    </Button>
+                            // 읽기 모드일 때는 편집 버튼
+                            <Button
+                                variant="outlined"
+                                size="small"
+                                onClick={enableEditMode}
+                                sx={{
+                                    color: '#00b5ad',
+                                    borderColor: '#00b5ad',
+                                    '&:hover': {
+                                        borderColor: '#009c95',
+                                        bgcolor: 'rgba(0, 181, 173, 0.1)'
+                                    }
+                                }}
+                            >
+                                편집
+                            </Button>
+                        )
+                    ) : (
+                        // 새 피드백인 경우: 저장 버튼
+                        <Button
+                            variant="contained"
+                            color="primary"
+                            size="small"
+                            onClick={saveFeedback}
+                            disabled={isSaving || content.trim() === ''}
+                            sx={{
+                                bgcolor: '#9147ff',
+                                '&:hover': {
+                                    bgcolor: '#772ce8',
+                                },
+                                '&.Mui-disabled': {
+                                    bgcolor: 'rgba(145, 71, 255, 0.2)',
+                                }
+                            }}
+                        >
+                            {isSaving ? (
+                                <CircularProgress size={20} sx={{ color: '#fff' }} />
+                            ) : (
+                                '저장'
+                            )}
+                        </Button>
+                    )
                 )}
             </Box>
         </Box>
