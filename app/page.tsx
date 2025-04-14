@@ -146,6 +146,10 @@ export default function Home() {
         setOpen(false);
     };
 
+    const handleAddSlogan = () => {
+        router.push('/slogan/add');
+    }
+
     const handleAddTrainingSession = () => {
         router.push('/training/add');
     };
@@ -186,7 +190,7 @@ export default function Home() {
                 console.log('세션 업데이트 성공:', sessionId);
                 return updateResult;
             } catch (error) {
-                console.warn('새 경로 업데이트 실패, 레거시 경로 시도...');
+                console.warn('새 경로 업데이트 실패, 레거시 경로 시도... : ', error);
 
                 // 재시도: 잠시 대기 후 레거시 경로로 시도
                 await new Promise(resolve => setTimeout(resolve, 100));
@@ -249,10 +253,10 @@ export default function Home() {
                     variant="contained"
                     color="primary"
                     startIcon={<AddIcon />}
-                    onClick={handleAddTrainingSession}
+                    onClick={handleAddSlogan}
                     sx={{ mb: 4 }}
                 >
-                    새 훈련 세션 추가
+                    새 슬로건 추가
                 </Button>
 
                 {/* 커스텀 달력 */}
