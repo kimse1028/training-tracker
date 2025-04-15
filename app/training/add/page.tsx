@@ -48,7 +48,7 @@ export default function AddTrainingPage() {
                     color: '#efeff1',
                     textShadow: '0 0 10px rgba(145, 71, 255, 0.5)'
                 }}>
-                    Training Tracker
+                    Game Gym
                 </Typography>
 
                 <NewTrainingForm />
