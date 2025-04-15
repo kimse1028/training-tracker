@@ -894,7 +894,7 @@ export default function Home() {
                     color: '#efeff1',
                     textShadow: '0 0 10px rgba(145, 71, 255, 0.5)'
                 }}>
-                    Training Tracker
+                    Game Gym
                 </Typography>
 
                 <Typography variant="h6" sx={{ mb: 1, color: '#adadb8' }}>
