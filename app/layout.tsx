@@ -17,7 +17,7 @@ export const metadata: Metadata = {
         siteName: 'GameGym',
         images: [
             {
-                url: 'https://www.gamegym.kr/gamer-gym.png',
+                url: 'https://www.gamegym.kr/game-gym.png',
                 width: 1200,
                 height: 630,
                 alt: 'GameGym',
