@@ -16,6 +16,7 @@ export interface TrainingSession {
     repeatType?: RepeatType;
     completed: boolean;
     isRepeated?: boolean; // 반복 일정인지 여부
+    priority?: number; // 우선순위 필드
 }
 
 /**
@@ -29,5 +30,6 @@ export interface FirestoreTrainingSession {
     date?: Timestamp;
     createdAt?: Timestamp;
     userId: string;
+    priority?: number; // 우선순위 필드
 }
 

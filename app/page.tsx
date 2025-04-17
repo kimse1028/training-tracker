@@ -610,6 +610,8 @@ export default function Home() {
     const [loadingFeedback, setLoadingFeedback] = useState<boolean>(false);
     const [feedbacks, setFeedbacks] = useState<Feedback[]>([]);
     const [loadingAllFeedbacks, setLoadingAllFeedbacks] = useState<boolean>(false);
+    const [draggedSessionItem, setDraggedSessionItem] = useState<number | null>(null);
+    const [isSessionDragging, setIsSessionDragging] = useState<boolean>(false);
 
     useEffect(() => {
         if (!loading && !user) {
@@ -731,7 +733,8 @@ export default function Home() {
             try {
                 setLoadingSessions(true);
                 const sessionsRef = collection(db, 'trainingSessions', user.uid, 'sessions');
-                const q = query(sessionsRef, orderBy('createdAt', 'desc'));
+                // 우선순위로 정렬 추가
+                const q = query(sessionsRef, orderBy('priority', 'desc'), orderBy('createdAt', 'desc'));
 
                 const querySnapshot = await getDocs(q);
                 const sessions = querySnapshot.docs.map(doc => {
@@ -740,7 +743,8 @@ export default function Home() {
                         id: doc.id,
                         ...data,
                         createdAt: data.createdAt?.toDate(),
-                        date: data.date?.toDate() || data.createdAt?.toDate()
+                        date: data.date?.toDate() || data.createdAt?.toDate(),
+                        priority: data.priority || 0 // 우선순위 기본값 설정
                     } as TrainingSession;
                 });
 
@@ -752,6 +756,7 @@ export default function Home() {
                     const legacyQuery = query(
                         collection(db, 'trainingSessions'),
                         where('userId', '==', user.uid),
+                        orderBy('priority', 'desc'), // 우선순위로 정렬 추가
                         orderBy('createdAt', 'desc')
                     );
 
@@ -762,7 +767,8 @@ export default function Home() {
                             id: doc.id,
                             ...data,
                             createdAt: data.createdAt?.toDate(),
-                            date: data.date?.toDate() || data.createdAt?.toDate()
+                            date: data.date?.toDate() || data.createdAt?.toDate(),
+                            priority: data.priority || 0 // 우선순위 기본값 설정
                         } as TrainingSession;
                     });
 
@@ -866,6 +872,86 @@ export default function Home() {
 
     const handleAddTrainingSession = () => {
         router.push('/training/add');
+    };
+
+// 훈련 세션 드래그 핸들러
+    const handleSessionDragStart = (e: React.DragEvent<HTMLDivElement>, index: number) => {
+        setDraggedSessionItem(index);
+        setIsSessionDragging(true);
+        e.currentTarget.style.opacity = '0.4';
+
+        const dragImage = e.currentTarget.cloneNode(true) as HTMLElement;
+        dragImage.style.position = 'absolute';
+        dragImage.style.top = '-1000px';
+        document.body.appendChild(dragImage);
+        e.dataTransfer.setDragImage(dragImage, 0, 0);
+        setTimeout(() => document.body.removeChild(dragImage), 0);
+    };
+
+    const handleSessionDragOver = (e: React.DragEvent<HTMLDivElement>, index: number) => {
+        e.preventDefault();
+        e.currentTarget.style.transform =
+            index < draggedSessionItem! ? 'translateY(-8px)' : 'translateY(8px)';
+    };
+
+    const handleSessionDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+        e.currentTarget.style.transform = 'translateY(0)';
+    };
+
+    const handleSessionDragEnd = (e: React.DragEvent<HTMLDivElement>) => {
+        setIsSessionDragging(false);
+        e.currentTarget.style.opacity = '1';
+        document.querySelectorAll<HTMLElement>('.session-card').forEach(card => {
+            card.style.transform = 'translateY(0)';
+        });
+    };
+
+    const handleSessionDrop = async (e: React.DragEvent<HTMLDivElement>, dropIndex: number) => {
+        e.preventDefault();
+        const dragIndex = draggedSessionItem;
+        // user가 null이면 함수를 바로 종료
+        if (dragIndex === dropIndex || dragIndex === null || !user) return;
+
+        try {
+            const newSessions = [...sessionsForSelectedDate];
+            const [removed] = newSessions.splice(dragIndex, 1);
+            newSessions.splice(dropIndex, 0, removed);
+
+            const updatedSessions = newSessions.map((session, index) => ({
+                ...session,
+                priority: newSessions.length - index
+            }));
+
+            // 파이어베이스에 우선순위 업데이트
+            const batch = writeBatch(db);
+            updatedSessions.forEach((session) => {
+                // 여기서 user가 null이 아니라고 확신할 수 있음
+                const sessionRef = doc(db, 'trainingSessions', user.uid, 'sessions', session.id);
+                batch.update(sessionRef, { priority: session.priority });
+            });
+            await batch.commit();
+
+            // 상태 업데이트
+            setSessionsForSelectedDate(updatedSessions);
+
+            // 전체 훈련 세션 목록도 업데이트
+            setTrainingSessions(prev => {
+                const updated = [...prev];
+                updatedSessions.forEach(session => {
+                    const index = updated.findIndex(s => s.id === session.id);
+                    if (index !== -1) {
+                        updated[index] = session;
+                    }
+                });
+                return updated;
+            });
+        } catch (error) {
+            console.error('훈련 세션 우선순위 업데이트 실패:', error);
+        }
+
+        document.querySelectorAll<HTMLElement>('.session-card').forEach(card => {
+            card.style.transform = 'translateY(0)';
+        });
     };
 
     if (loading) {
@@ -1020,14 +1106,31 @@ export default function Home() {
                 <DialogContent sx={{ pt: 3 }}>
                     {sessionsForSelectedDate.length > 0 ? (
                         <Box>
-                            {sessionsForSelectedDate.map((session) => (
+                            {sessionsForSelectedDate.map((session, index) => (
                                 <Paper
                                     key={session.id}
+                                    className="session-card"
+                                    draggable={!selectedDate.isBefore(dayjs(), 'day')} // 과거 날짜는 드래그 불가
+                                    onDragStart={(e) => handleSessionDragStart(e, index)}
+                                    onDragOver={(e) => handleSessionDragOver(e, index)}
+                                    onDragLeave={handleSessionDragLeave}
+                                    onDragEnd={handleSessionDragEnd}
+                                    onDrop={(e) => handleSessionDrop(e, index)}
                                     sx={{
                                         p: 2,
                                         mt: 2,
                                         borderLeft: '4px solid #9147ff',
                                         transition: 'all 0.2s',
+                                        cursor: !selectedDate.isBefore(dayjs(), 'day') ? 'grab' : 'default',
+                                        '&:hover': {
+                                            ...((!selectedDate.isBefore(dayjs(), 'day') && !isSessionDragging) && {
+                                                transform: 'translateY(-2px)',
+                                                boxShadow: '0 4px 12px rgba(145, 71, 255, 0.15)'
+                                            })
+                                        },
+                                        '&:active': {
+                                            cursor: !selectedDate.isBefore(dayjs(), 'day') ? 'grabbing' : 'default'
+                                        },
                                         ...(session.completed && {
                                             opacity: 0.7,
                                             borderLeft: '4px solid #00b5ad',
@@ -1035,38 +1138,50 @@ export default function Home() {
                                     }}
                                 >
                                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <FormControlLabel
-                                            control={
-                                                <Checkbox
-                                                    checked={session.completed || false}
-                                                    onChange={(e) => handleCheckSession(session.id, e.target.checked)}
-                                                    disabled={selectedDate && selectedDate.isBefore(dayjs(), 'day')}
+                                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                            {!selectedDate.isBefore(dayjs(), 'day') && (
+                                                <DragIndicatorIcon
                                                     sx={{
                                                         color: '#9147ff',
-                                                        '&.Mui-checked': {
-                                                            color: '#00b5ad',
-                                                        },
-                                                        '&.Mui-disabled': {
-                                                            color: session.completed ? '#006e68' : '#61357f',
-                                                        }
+                                                        opacity: 0.7,
+                                                        cursor: 'grab',
+                                                        mr: 1
                                                     }}
                                                 />
-                                            }
-                                            label={
-                                                <Typography
-                                                    variant="h6"
-                                                    sx={{
-                                                        color: '#efeff1',
-                                                        ...(session.completed && {
-                                                            textDecoration: 'line-through',
-                                                            color: '#adadb8'
-                                                        })
-                                                    }}
-                                                >
-                                                    {session.name}
-                                                </Typography>
-                                            }
-                                        />
+                                            )}
+                                            <FormControlLabel
+                                                control={
+                                                    <Checkbox
+                                                        checked={session.completed || false}
+                                                        onChange={(e) => handleCheckSession(session.id, e.target.checked)}
+                                                        disabled={selectedDate && selectedDate.isBefore(dayjs(), 'day')}
+                                                        sx={{
+                                                            color: '#9147ff',
+                                                            '&.Mui-checked': {
+                                                                color: '#00b5ad',
+                                                            },
+                                                            '&.Mui-disabled': {
+                                                                color: session.completed ? '#006e68' : '#61357f',
+                                                            }
+                                                        }}
+                                                    />
+                                                }
+                                                label={
+                                                    <Typography
+                                                        variant="h6"
+                                                        sx={{
+                                                            color: '#efeff1',
+                                                            ...(session.completed && {
+                                                                textDecoration: 'line-through',
+                                                                color: '#adadb8'
+                                                            })
+                                                        }}
+                                                    >
+                                                        {session.name}
+                                                    </Typography>
+                                                }
+                                            />
+                                        </Box>
                                     </Box>
 
                                     <Typography

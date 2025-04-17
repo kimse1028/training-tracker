@@ -19,7 +19,7 @@ import { LocalizationProvider, DatePicker } from '@mui/x-date-pickers';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import dayjs, { Dayjs } from 'dayjs';
 import 'dayjs/locale/ko';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import {collection, addDoc, serverTimestamp, query, orderBy, limit, getDocs} from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/context/AuthContext';
 import { RepeatType } from '@/lib/types';
@@ -127,7 +127,6 @@ const NewTrainingForm = () => {
         try {
             setSubmitting(true);
 
-            // 사용자가 로그인했고 날짜가 선택되었는지 확인
             if (user && formValues.date) {
                 // 날짜 데이터 추출
                 const year = formValues.date.format('YYYY');
@@ -137,19 +136,39 @@ const NewTrainingForm = () => {
                 // 사용자별 sessions 컬렉션 참조
                 const sessionsCollectionRef = collection(db, 'trainingSessions', user.uid, 'sessions');
 
+                // 기존 훈련 세션 중 가장 높은 우선순위 찾기
+                let highestPriority = 0;
+                try {
+                    const priorityQuery = query(
+                        sessionsCollectionRef,
+                        orderBy('priority', 'desc'),
+                        limit(1)
+                    );
+
+                    const prioritySnapshot = await getDocs(priorityQuery);
+                    if (!prioritySnapshot.empty) {
+                        const highestPriorityDoc = prioritySnapshot.docs[0].data();
+                        highestPriority = highestPriorityDoc.priority || 0;
+                    }
+                } catch (error) {
+                    console.error('우선순위 조회 오류:', error);
+                    // 오류가 발생해도 진행
+                }
+
                 // 기본 세션 데이터 준비
                 const sessionData = {
                     name: formValues.name,
                     content: formValues.content,
                     date: formValues.date.toDate(),
-                    year: year,      // 년도 필드 추가
-                    month: month,    // 월 필드 추가
-                    day: day,        // 일 필드 추가
+                    year: year,
+                    month: month,
+                    day: day,
                     duration: formValues.duration,
                     completed: false,
                     createdAt: serverTimestamp(),
                     repeatType: formValues.repeatType,
-                    isRepeated: false
+                    isRepeated: false,
+                    priority: highestPriority + 1 // 우선순위 추가
                 };
 
                 // trainingSessions/{userID}/sessions 컬렉션에 문서 추가
@@ -159,6 +178,7 @@ const NewTrainingForm = () => {
                 if (formValues.repeatType !== 'none') {
                     let currentDate = formValues.date.clone();
                     const endDate = formValues.date.clone().add(3, 'month'); // 3개월 동안의 반복 세션 생성
+                    let currentPriority = highestPriority + 1;
 
                     while (currentDate.isBefore(endDate)) {
                         if (formValues.repeatType === 'daily') {
@@ -166,6 +186,8 @@ const NewTrainingForm = () => {
                         } else if (formValues.repeatType === 'weekly') {
                             currentDate = currentDate.add(1, 'week');
                         }
+
+                        currentPriority++; // 각 반복 세션마다 우선순위 증가
 
                         // 반복 세션의 날짜 데이터
                         const repeatYear = currentDate.format('YYYY');
@@ -183,7 +205,8 @@ const NewTrainingForm = () => {
                             completed: false,
                             createdAt: serverTimestamp(),
                             repeatType: formValues.repeatType,
-                            isRepeated: true
+                            isRepeated: true,
+                            priority: currentPriority // 증가된 우선순위 적용
                         };
 
                         // 동일한 컬렉션에 반복 세션 추가
