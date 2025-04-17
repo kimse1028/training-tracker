@@ -930,28 +930,69 @@ export default function Home() {
             const [removed] = newSessions.splice(dragIndex, 1);
             newSessions.splice(dropIndex, 0, removed);
 
-            // 우선순위 업데이트
+            // 우선순위 업데이트 - 음수 값 사용 (더 작은 값이 더 높은 우선순위)
             const updatedSessions = newSessions.map((session, index) => ({
                 ...session,
-                priority: newSessions.length - index
+                priority: -index  // 더 위에 있을수록 더 작은 음수 값 (-0, -1, -2, ...)
             }));
 
-            // 드래그한 세션의 이름 가져오기
+            // 드래그한 세션의 이름과 생성 "월"을 추출
             const draggedSessionName = removed.name;
+
+            // createdAt이 문자열, Date 또는 Timestamp 객체일 수 있으므로 안전하게 처리
+            let draggedSessionMonth: number | null = null;
+            let draggedSessionYear: number | null = null;
+
+            if (removed.createdAt) {
+                // 문자열이나 숫자인 경우 Date 객체로 변환
+                const createdAtDate = new Date(removed.createdAt);
+
+                // 유효한 날짜인지 확인
+                if (!isNaN(createdAtDate.getTime())) {
+                    draggedSessionMonth = createdAtDate.getMonth() + 1; // 0-11에서 1-12로 변환
+                    draggedSessionYear = createdAtDate.getFullYear();
+                }
+            }
 
             // 로컬 상태 업데이트 - 선택된 날짜의 세션
             setSessionsForSelectedDate([...updatedSessions]);
 
-            // 전체 훈련 세션 목록에서 같은 이름을 가진 모든 세션의 우선순위 업데이트
+            // 전체 훈련 세션 목록에서 같은 이름과 같은 생성 월을 가진 세션들의 우선순위 업데이트
             setTrainingSessions(prev => {
                 const newTrainingSessions = [...prev];
-                // 같은 이름을 가진 세션 찾기
-                const sameNameSessions = newTrainingSessions.filter(s => s.name === draggedSessionName);
+
+                // 같은 이름과 생성 월/년도를 가진 세션 찾기
+                const sameNameAndDateSessions = newTrainingSessions.filter(s => {
+                    // 이름이 같은지 확인
+                    if (s.name !== draggedSessionName) return false;
+
+                    // 생성 월이 추출되지 않았다면 이름만으로 비교
+                    if (draggedSessionMonth === null || draggedSessionYear === null) {
+                        return true;
+                    }
+
+                    // createdAt이 없으면 이름으로만 비교
+                    if (!s.createdAt) return true;
+
+                    // 문자열이나 숫자인 경우 Date 객체로 변환
+                    const createdAtDate = new Date(s.createdAt);
+
+                    // 유효한 날짜가 아니면 이름으로만 비교
+                    if (isNaN(createdAtDate.getTime())) return true;
+
+                    // 세션의 생성 월과 년도 추출
+                    const sessionMonth = createdAtDate.getMonth() + 1;
+                    const sessionYear = createdAtDate.getFullYear();
+
+                    // 이름이 같고, 생성 월과 년도가 같은 세션만 필터링
+                    return sessionMonth === draggedSessionMonth && sessionYear === draggedSessionYear;
+                });
+
                 // 우선순위 값 가져오기
                 const newPriority = updatedSessions.find(s => s.name === draggedSessionName)?.priority || 0;
 
-                // 같은 이름을 가진 모든 세션의 우선순위 업데이트
-                sameNameSessions.forEach(session => {
+                // 같은 이름과 생성 월을 가진 모든 세션의 우선순위 업데이트
+                sameNameAndDateSessions.forEach(session => {
                     const index = newTrainingSessions.findIndex(s => s.id === session.id);
                     if (index !== -1) {
                         newTrainingSessions[index] = {
@@ -964,19 +1005,41 @@ export default function Home() {
                 return newTrainingSessions;
             });
 
-            // 파이어베이스에 우선순위 업데이트 - 같은 이름을 가진 모든 세션 업데이트
+            // 파이어베이스에 우선순위 업데이트 - 같은 이름과 생성 월을 가진 모든 세션 업데이트
             const batch = writeBatch(db);
 
-            // 전체 세션에서 같은 이름을 가진 세션들 찾기
-            const sameNameSessions = trainingSessions.filter(
-                session => session.name === draggedSessionName
-            );
+            // 전체 세션에서 같은 이름과 생성 월을 가진 세션들 찾기
+            const sameNameAndDateSessions = trainingSessions.filter(session => {
+                // 이름이 같은지 확인
+                if (session.name !== draggedSessionName) return false;
+
+                // 생성 월이 추출되지 않았다면 이름만으로 비교
+                if (draggedSessionMonth === null || draggedSessionYear === null) {
+                    return true;
+                }
+
+                // createdAt이 없으면 이름으로만 비교
+                if (!session.createdAt) return true;
+
+                // 문자열이나 숫자인 경우 Date 객체로 변환
+                const createdAtDate = new Date(session.createdAt);
+
+                // 유효한 날짜가 아니면 이름으로만 비교
+                if (isNaN(createdAtDate.getTime())) return true;
+
+                // 세션의 생성 월과 년도 추출
+                const sessionMonth = createdAtDate.getMonth() + 1;
+                const sessionYear = createdAtDate.getFullYear();
+
+                // 이름이 같고, 생성 월과 년도가 같은 세션만 필터링
+                return sessionMonth === draggedSessionMonth && sessionYear === draggedSessionYear;
+            });
 
             // 새 우선순위 값 가져오기
             const newPriority = updatedSessions.find(s => s.name === draggedSessionName)?.priority || 0;
 
-            // 같은 이름을 가진 모든 세션 업데이트
-            sameNameSessions.forEach((session) => {
+            // 같은 이름과 생성 월을 가진 모든 세션 업데이트
+            sameNameAndDateSessions.forEach((session) => {
                 const sessionRef = doc(db, 'trainingSessions', user.uid, 'sessions', session.id);
                 batch.update(sessionRef, { priority: newPriority });
             });
@@ -984,7 +1047,7 @@ export default function Home() {
             await batch.commit();
 
             // 성공적으로 업데이트됨을 알리기
-            console.log('우선순위 업데이트 성공:', `${sameNameSessions.length}개의 세션 업데이트됨`);
+            console.log('우선순위 업데이트 성공:', `${sameNameAndDateSessions.length}개의 세션 업데이트됨`);
 
             // 약간의 지연 후 강제 리렌더링을 위한 추가 단계
             setTimeout(() => {

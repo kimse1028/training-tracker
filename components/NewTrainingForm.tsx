@@ -19,7 +19,7 @@ import { LocalizationProvider, DatePicker } from '@mui/x-date-pickers';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import dayjs, { Dayjs } from 'dayjs';
 import 'dayjs/locale/ko';
-import {collection, addDoc, serverTimestamp, query, orderBy, limit, getDocs} from 'firebase/firestore';
+import {collection, addDoc, serverTimestamp, query, orderBy, limit, getDocs, where} from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/context/AuthContext';
 import { RepeatType } from '@/lib/types';
@@ -95,6 +95,7 @@ const NewTrainingForm = () => {
     };
 
     // 폼 제출 핸들러
+    // 폼 제출 핸들러
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
@@ -136,23 +137,44 @@ const NewTrainingForm = () => {
                 // 사용자별 sessions 컬렉션 참조
                 const sessionsCollectionRef = collection(db, 'trainingSessions', user.uid, 'sessions');
 
-                // 기존 훈련 세션 중 가장 높은 우선순위 찾기
-                let highestPriority = 0;
+                // 같은 이름의 훈련 세션이 있는지 먼저 확인합니다
+                let sessionPriority = 0;
                 try {
-                    const priorityQuery = query(
+                    const sameNameQuery = query(
                         sessionsCollectionRef,
-                        orderBy('priority', 'desc'),
+                        // 같은 이름의 훈련을 검색합니다
+                        where('name', '==', formValues.name),
                         limit(1)
                     );
 
-                    const prioritySnapshot = await getDocs(priorityQuery);
-                    if (!prioritySnapshot.empty) {
-                        const highestPriorityDoc = prioritySnapshot.docs[0].data();
-                        highestPriority = highestPriorityDoc.priority || 0;
+                    const sameNameSnapshot = await getDocs(sameNameQuery);
+
+                    if (!sameNameSnapshot.empty) {
+                        // 같은 이름의 훈련이 있으면 해당 우선순위 사용
+                        const existingSession = sameNameSnapshot.docs[0].data();
+                        sessionPriority = existingSession.priority || 0;
+                        console.log('기존 훈련 우선순위 사용:', sessionPriority);
+                    } else {
+                        // 같은 이름의 훈련이 없으면 최고 우선순위 + 1
+                        const priorityQuery = query(
+                            sessionsCollectionRef,
+                            orderBy('priority', 'asc'), // 오름차순으로 정렬 (숫자가 작을수록 위로)
+                            limit(1)
+                        );
+
+                        const prioritySnapshot = await getDocs(priorityQuery);
+                        if (!prioritySnapshot.empty) {
+                            const highestPriorityDoc = prioritySnapshot.docs[0].data();
+                            sessionPriority = (highestPriorityDoc.priority || 0) - 1; // 가장 작은 숫자보다 1 작게
+                        } else {
+                            sessionPriority = 0; // 첫 번째 항목
+                        }
+                        console.log('새 우선순위 생성:', sessionPriority);
                     }
                 } catch (error) {
                     console.error('우선순위 조회 오류:', error);
-                    // 오류가 발생해도 진행
+                    // 오류 발생 시 기본값 0 사용
+                    sessionPriority = 0;
                 }
 
                 // 기본 세션 데이터 준비
@@ -168,7 +190,7 @@ const NewTrainingForm = () => {
                     createdAt: serverTimestamp(),
                     repeatType: formValues.repeatType,
                     isRepeated: false,
-                    priority: highestPriority + 1 // 우선순위 추가
+                    priority: sessionPriority // 계산된 우선순위 사용
                 };
 
                 // trainingSessions/{userID}/sessions 컬렉션에 문서 추가
@@ -178,7 +200,6 @@ const NewTrainingForm = () => {
                 if (formValues.repeatType !== 'none') {
                     let currentDate = formValues.date.clone();
                     const endDate = formValues.date.clone().add(3, 'month'); // 3개월 동안의 반복 세션 생성
-                    let currentPriority = highestPriority + 1;
 
                     while (currentDate.isBefore(endDate)) {
                         if (formValues.repeatType === 'daily') {
@@ -186,8 +207,6 @@ const NewTrainingForm = () => {
                         } else if (formValues.repeatType === 'weekly') {
                             currentDate = currentDate.add(1, 'week');
                         }
-
-                        currentPriority++; // 각 반복 세션마다 우선순위 증가
 
                         // 반복 세션의 날짜 데이터
                         const repeatYear = currentDate.format('YYYY');
@@ -206,7 +225,7 @@ const NewTrainingForm = () => {
                             createdAt: serverTimestamp(),
                             repeatType: formValues.repeatType,
                             isRepeated: true,
-                            priority: currentPriority // 증가된 우선순위 적용
+                            priority: sessionPriority // 모든 반복 세션에 동일한 우선순위 사용
                         };
 
                         // 동일한 컬렉션에 반복 세션 추가

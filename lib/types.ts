@@ -17,6 +17,7 @@ export interface TrainingSession {
     completed: boolean;
     isRepeated?: boolean; // 반복 일정인지 여부
     priority?: number; // 우선순위 필드
+    createdAt?: Date;
 }
 
 /**
