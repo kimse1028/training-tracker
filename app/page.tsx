@@ -612,6 +612,8 @@ export default function Home() {
     const [loadingAllFeedbacks, setLoadingAllFeedbacks] = useState<boolean>(false);
     const [draggedSessionItem, setDraggedSessionItem] = useState<number | null>(null);
     const [isSessionDragging, setIsSessionDragging] = useState<boolean>(false);
+    const [forceRefresh, setForceRefresh] = useState(0);
+
 
     useEffect(() => {
         if (!loading && !user) {
@@ -782,18 +784,21 @@ export default function Home() {
         };
 
         fetchTrainingSessions();
-    }, [user]);
+    }, [user, forceRefresh]);
 
     useEffect(() => {
         if (selectedDate && trainingSessions.length > 0) {
-            const filteredSessions = trainingSessions.filter(session =>
-                session.date && dayjs(session.date).format('YYYY-MM-DD') === selectedDate.format('YYYY-MM-DD')
-            );
-            setSessionsForSelectedDate(filteredSessions);
+            // 드래그앤드롭 중에는 실행되지 않도록 조건 추가
+            if (!isSessionDragging) {
+                const filteredSessions = trainingSessions.filter(session =>
+                    session.date && dayjs(session.date).format('YYYY-MM-DD') === selectedDate.format('YYYY-MM-DD')
+                );
+                setSessionsForSelectedDate(filteredSessions);
+            }
         } else {
             setSessionsForSelectedDate([]);
         }
-    }, [selectedDate, trainingSessions]);
+    }, [selectedDate, trainingSessions, isSessionDragging]);
 
     const handleCheckSession = useCallback(async (sessionId: string, completed: boolean) => {
         try {
@@ -899,11 +904,15 @@ export default function Home() {
     };
 
     const handleSessionDragEnd = (e: React.DragEvent<HTMLDivElement>) => {
-        setIsSessionDragging(false);
         e.currentTarget.style.opacity = '1';
         document.querySelectorAll<HTMLElement>('.session-card').forEach(card => {
             card.style.transform = 'translateY(0)';
         });
+
+        // 드롭 실패 시 상태 초기화를 위해 timeout
+        setTimeout(() => {
+            setIsSessionDragging(false);
+        }, 200);
     };
 
     const handleSessionDrop = async (e: React.DragEvent<HTMLDivElement>, dropIndex: number) => {
@@ -913,45 +922,88 @@ export default function Home() {
         if (dragIndex === dropIndex || dragIndex === null || !user) return;
 
         try {
-            const newSessions = [...sessionsForSelectedDate];
+            // 드래그 중 상태 설정
+            setIsSessionDragging(true);
+
+            // 세션 재정렬을 위한 깊은 복사 생성
+            const newSessions = JSON.parse(JSON.stringify(sessionsForSelectedDate));
             const [removed] = newSessions.splice(dragIndex, 1);
             newSessions.splice(dropIndex, 0, removed);
 
+            // 우선순위 업데이트
             const updatedSessions = newSessions.map((session, index) => ({
                 ...session,
                 priority: newSessions.length - index
             }));
 
-            // 파이어베이스에 우선순위 업데이트
-            const batch = writeBatch(db);
-            updatedSessions.forEach((session) => {
-                // 여기서 user가 null이 아니라고 확신할 수 있음
-                const sessionRef = doc(db, 'trainingSessions', user.uid, 'sessions', session.id);
-                batch.update(sessionRef, { priority: session.priority });
-            });
-            await batch.commit();
+            // 드래그한 세션의 이름 가져오기
+            const draggedSessionName = removed.name;
 
-            // 상태 업데이트
-            setSessionsForSelectedDate(updatedSessions);
+            // 로컬 상태 업데이트 - 선택된 날짜의 세션
+            setSessionsForSelectedDate([...updatedSessions]);
 
-            // 전체 훈련 세션 목록도 업데이트
+            // 전체 훈련 세션 목록에서 같은 이름을 가진 모든 세션의 우선순위 업데이트
             setTrainingSessions(prev => {
-                const updated = [...prev];
-                updatedSessions.forEach(session => {
-                    const index = updated.findIndex(s => s.id === session.id);
+                const newTrainingSessions = [...prev];
+                // 같은 이름을 가진 세션 찾기
+                const sameNameSessions = newTrainingSessions.filter(s => s.name === draggedSessionName);
+                // 우선순위 값 가져오기
+                const newPriority = updatedSessions.find(s => s.name === draggedSessionName)?.priority || 0;
+
+                // 같은 이름을 가진 모든 세션의 우선순위 업데이트
+                sameNameSessions.forEach(session => {
+                    const index = newTrainingSessions.findIndex(s => s.id === session.id);
                     if (index !== -1) {
-                        updated[index] = session;
+                        newTrainingSessions[index] = {
+                            ...newTrainingSessions[index],
+                            priority: newPriority
+                        };
                     }
                 });
-                return updated;
+
+                return newTrainingSessions;
             });
+
+            // 파이어베이스에 우선순위 업데이트 - 같은 이름을 가진 모든 세션 업데이트
+            const batch = writeBatch(db);
+
+            // 전체 세션에서 같은 이름을 가진 세션들 찾기
+            const sameNameSessions = trainingSessions.filter(
+                session => session.name === draggedSessionName
+            );
+
+            // 새 우선순위 값 가져오기
+            const newPriority = updatedSessions.find(s => s.name === draggedSessionName)?.priority || 0;
+
+            // 같은 이름을 가진 모든 세션 업데이트
+            sameNameSessions.forEach((session) => {
+                const sessionRef = doc(db, 'trainingSessions', user.uid, 'sessions', session.id);
+                batch.update(sessionRef, { priority: newPriority });
+            });
+
+            await batch.commit();
+
+            // 성공적으로 업데이트됨을 알리기
+            console.log('우선순위 업데이트 성공:', `${sameNameSessions.length}개의 세션 업데이트됨`);
+
+            // 약간의 지연 후 강제 리렌더링을 위한 추가 단계
+            setTimeout(() => {
+                // 전체 데이터 새로고침 트리거
+                setForceRefresh(prev => prev + 1);
+            }, 100);
+
         } catch (error) {
             console.error('훈련 세션 우선순위 업데이트 실패:', error);
-        }
+        } finally {
+            // 드래그 종료 후 상태 변경 (약간의 지연 추가)
+            setTimeout(() => {
+                setIsSessionDragging(false);
+            }, 100);
 
-        document.querySelectorAll<HTMLElement>('.session-card').forEach(card => {
-            card.style.transform = 'translateY(0)';
-        });
+            document.querySelectorAll<HTMLElement>('.session-card').forEach(card => {
+                card.style.transform = 'translateY(0)';
+            });
+        }
     };
 
     if (loading) {
@@ -1108,7 +1160,7 @@ export default function Home() {
                         <Box>
                             {sessionsForSelectedDate.map((session, index) => (
                                 <Paper
-                                    key={session.id}
+                                    key={`${session.id}-${session.priority}`}
                                     className="session-card"
                                     draggable={!selectedDate.isBefore(dayjs(), 'day')} // 과거 날짜는 드래그 불가
                                     onDragStart={(e) => handleSessionDragStart(e, index)}
