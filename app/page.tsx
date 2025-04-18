@@ -41,6 +41,11 @@ import { TrainingSession, FirestoreTrainingSession } from '@/lib/types';
 import CustomCalendar from '@/components/CustomCalendar';
 import TrainingTimer from '@/components/TrainingTimer';
 import {User} from "firebase/auth";
+import Dashboard from '@/components/Dashboard';
+import BadgeCollection from '@/components/BadgeCollection';
+import BadgeAchievementModal from '@/components/BadgeAchievementModal';
+import { BadgeService, initializeDefaultBadges } from '@/lib/BadgeService';
+import { Badge } from '@/components/BadgeCollection';
 // 로케일 설정
 dayjs.locale('ko');
 
@@ -635,6 +640,9 @@ export default function Home() {
     const [deleteLoading, setDeleteLoading] = useState<boolean>(false);
     const [successMessage, setSuccessMessage] = useState<string | null>(null);
     const [completedSessionId, setCompletedSessionId] = useState<string | null>(null);
+    const [newBadge, setNewBadge] = useState<Badge | null>(null);
+    const [badgeModalOpen, setBadgeModalOpen] = useState<boolean>(false);
+
 
 
     useEffect(() => {
@@ -642,6 +650,13 @@ export default function Home() {
             router.push('/login');
         }
     }, [user, loading, router]);
+
+    useEffect(() => {
+        // 첫 로드시 기본 뱃지 초기화 (이미 있으면 아무일도 일어나지 않음)
+        if (user) {
+            initializeDefaultBadges().catch(console.error);
+        }
+    }, [user]);
 
     // 모든 피드백 가져오기
     useEffect(() => {
@@ -822,6 +837,28 @@ export default function Home() {
         }
     }, [selectedDate, trainingSessions, isSessionDragging]);
 
+    // 훈련 세션 완료 시 뱃지 확인 로직
+    const checkForBadges = useCallback(async () => {
+        if (!user || trainingSessions.length === 0) return;
+
+        // 뱃지 서비스 인스턴스 생성
+        const badgeService = new BadgeService(user.uid, trainingSessions);
+
+        // 새로 획득한 뱃지 확인
+        const earnedBadge = await badgeService.checkBadgeAchievements();
+
+        // 뱃지 획득 시 모달 표시
+        if (earnedBadge) {
+            setNewBadge(earnedBadge);
+            setBadgeModalOpen(true);
+
+            // 강제 리렌더링을 위한 추가 단계
+            setTimeout(() => {
+                setForceRefresh(prev => prev + 1);
+            }, 100);
+        }
+    }, [user, trainingSessions]);
+
     const handleCheckSession = useCallback(async (sessionId: string, completed: boolean) => {
         try {
             if (!user) return;
@@ -871,6 +908,11 @@ export default function Home() {
 
                     // 3초 후 메시지 사라짐
                     setTimeout(() => setSuccessMessage(null), 3000);
+
+                    // 뱃지 확인 로직 호출
+                    setTimeout(() => {
+                        checkForBadges();
+                    }, 1000);
                 }
 
                 return updateResult;
@@ -893,7 +935,7 @@ export default function Home() {
         } catch (error) {
             console.error('훈련 세션 업데이트 처리 중 오류:', error);
         }
-    }, [user, trainingSessions]);
+    }, [user, trainingSessions, checkForBadges]);
 
     const handleTimerComplete = useCallback(() => {
         if (activeTimerSessionId) {
@@ -908,9 +950,14 @@ export default function Home() {
             setTimeout(() => {
                 handleCheckSession(activeTimerSessionId, true);
                 setActiveTimerSessionId(null);
+
+                // 뱃지 확인 로직 호출
+                setTimeout(() => {
+                    checkForBadges();
+                }, 1500);
             }, 0);
         }
-    }, [activeTimerSessionId, handleCheckSession]);
+    }, [activeTimerSessionId, handleCheckSession, checkForBadges]);
 
     const handleDateSelect = (date: Dayjs) => {
         setSelectedDate(date);
@@ -1343,6 +1390,15 @@ export default function Home() {
                         setSlogans={setSlogans}
                     />
                 </Paper>
+
+                {/* 대시보드 추가 */}
+                <Dashboard
+                    user={user}
+                    trainingSessions={trainingSessions}
+                />
+
+                {/* 뱃지 컬렉션 추가 */}
+                <BadgeCollection user={user} />
 
                 <Paper sx={{ p: 3, mb: 4, width: '100%' }}>
                     {loadingSessions || loadingAllFeedbacks ? (
@@ -1785,6 +1841,12 @@ export default function Home() {
                     </DialogActions>
                 </Dialog>
             </Dialog>
+            {/* 뱃지 획득 모달 */}
+            <BadgeAchievementModal
+                open={badgeModalOpen}
+                onClose={() => setBadgeModalOpen(false)}
+                badge={newBadge}
+            />
         </Container>
     );
 }
