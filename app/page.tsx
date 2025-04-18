@@ -929,6 +929,9 @@ export default function Home() {
             // 드래그 중 상태 설정
             setIsSessionDragging(true);
 
+            // 성공 메시지 초기화
+            setSuccessMessage(null);
+
             // 세션 재정렬을 위한 깊은 복사 생성
             const newSessions = JSON.parse(JSON.stringify(sessionsForSelectedDate));
             const [removed] = newSessions.splice(dragIndex, 1);
@@ -1050,8 +1053,11 @@ export default function Home() {
 
             await batch.commit();
 
-            // 성공적으로 업데이트됨을 알리기
-            console.log('우선순위 업데이트 성공:', `${sameNameAndDateSessions.length}개의 세션 업데이트됨`);
+            // 성공 메시지 설정
+            setSuccessMessage(`'${draggedSessionName}' 세션의 순서가 변경되었습니다`);
+
+            // 3초 후 메시지 사라짐
+            setTimeout(() => setSuccessMessage(null), 3000);
 
             // 약간의 지연 후 강제 리렌더링을 위한 추가 단계
             setTimeout(() => {
