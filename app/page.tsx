@@ -1183,6 +1183,13 @@ export default function Home() {
         }
     };
 
+    // 세션 이름 가져오는 함수
+    const getSelectedSessionName = () => {
+        if (!selectedSessionId) return '';
+        const session = trainingSessions.find(session => session.id === selectedSessionId);
+        return session ? session.name : '';
+    };
+
     if (loading) {
         return (
             <Container maxWidth="lg" sx={{ textAlign: 'center', mt: 10 }}>
@@ -1498,24 +1505,71 @@ export default function Home() {
                         }
                     }}
                 >
-                    <DialogTitle sx={{ color: '#efeff1' }}>
-                        훈련 세션 삭제
+                    <DialogTitle sx={{
+                        color: '#efeff1',
+                        borderBottom: '1px solid rgba(220, 53, 69, 0.2)',
+                        pb: 2
+                    }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Box sx={{
+                                color: '#dc3545',
+                                bgcolor: 'rgba(220, 53, 69, 0.1)',
+                                p: 1,
+                                borderRadius: '50%',
+                                display: 'flex'
+                            }}>
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M3 6h18"></path>
+                                    <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
+                                    <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
+                                    <line x1="10" y1="11" x2="10" y2="17"></line>
+                                    <line x1="14" y1="11" x2="14" y2="17"></line>
+                                </svg>
+                            </Box>
+                            훈련 세션 삭제
+                        </Box>
                     </DialogTitle>
-                    <DialogContent>
-                        <Typography sx={{ color: '#adadb8' }}>
-                            이 훈련 세션을 삭제하시겠습니까? 같은 이름과 생성 월의 모든 세션이 함께 삭제됩니다.
+                    <DialogContent sx={{ py: 3 }}>
+                        <Typography sx={{ color: '#adadb8', mb: 2 }}>
+                            <strong>{getSelectedSessionName()}</strong> 세션을 삭제하시겠습니까?
+                        </Typography>
+                        <Box sx={{
+                            p: 2,
+                            bgcolor: 'rgba(220, 53, 69, 0.05)',
+                            border: '1px solid rgba(220, 53, 69, 0.2)',
+                            borderRadius: 1,
+                            mb: 1
+                        }}>
+                            <Typography sx={{ color: '#dc3545', fontSize: '0.9rem' }}>
+                                주의: 같은 이름과 생성 월을 가진 모든 세션이 함께 삭제됩니다.
+                            </Typography>
+                        </Box>
+                        <Typography variant="caption" sx={{ color: '#adadb8', display: 'block', mt: 1 }}>
+                            이 작업은 되돌릴 수 없습니다.
                         </Typography>
                     </DialogContent>
-                    <DialogActions sx={{ p: 2 }}>
+                    <DialogActions sx={{ p: 2, borderTop: '1px solid rgba(145, 71, 255, 0.1)' }}>
                         <Button
                             onClick={handleCloseDeleteSessionDialog}
-                            sx={{ color: '#adadb8' }}
+                            sx={{
+                                color: '#adadb8',
+                                '&:hover': {
+                                    bgcolor: 'rgba(173, 173, 184, 0.1)'
+                                }
+                            }}
                         >
                             취소
                         </Button>
                         <Button
                             onClick={handleDeleteSession}
                             variant="contained"
+                            startIcon={
+                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M3 6h18"></path>
+                                    <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
+                                    <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
+                                </svg>
+                            }
                             sx={{
                                 bgcolor: '#dc3545',
                                 '&:hover': {
