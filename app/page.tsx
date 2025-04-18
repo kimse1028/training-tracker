@@ -613,6 +613,8 @@ export default function Home() {
     const [draggedSessionItem, setDraggedSessionItem] = useState<number | null>(null);
     const [isSessionDragging, setIsSessionDragging] = useState<boolean>(false);
     const [forceRefresh, setForceRefresh] = useState(0);
+    const [deleteSessionDialogOpen, setDeleteSessionDialogOpen] = useState<boolean>(false);
+    const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
 
 
     useEffect(() => {
@@ -1069,6 +1071,118 @@ export default function Home() {
         }
     };
 
+    const handleSessionClick = (e: React.MouseEvent, sessionId: string) => {
+        // 드래그 중이면 실행하지 않음
+        if (isSessionDragging) return;
+
+        // 체크박스 클릭은 무시 (체크박스 기능을 유지하기 위해)
+        const target = e.target as Element;
+        if (target.tagName === 'INPUT' || target.closest('input') ||
+            target.classList.contains('MuiCheckbox-root') ||
+            target.closest('.MuiCheckbox-root') ||
+            target.classList.contains('MuiFormControlLabel-root') ||
+            target.closest('.MuiFormControlLabel-root')) {
+            return;
+        }
+
+        // 타이머 버튼이나 그 하위 요소 클릭은 무시
+        if (target.closest('button')) {
+            return;
+        }
+
+        setSelectedSessionId(sessionId);
+        setDeleteSessionDialogOpen(true);
+    };
+
+    // 삭제 다이얼로그 닫기
+    const handleCloseDeleteSessionDialog = () => {
+        setDeleteSessionDialogOpen(false);
+        setSelectedSessionId(null);
+    };
+
+    // 훈련 세션 삭제 처리
+    const handleDeleteSession = async () => {
+        if (!selectedSessionId || !user) return;
+
+        try {
+            // 선택된 세션 정보 가져오기
+            const selectedSession = trainingSessions.find(session => session.id === selectedSessionId);
+            if (!selectedSession) {
+                console.error('선택된 세션을 찾을 수 없습니다.');
+                return;
+            }
+
+            // 삭제할 세션의 이름과 생성 월/년도 추출
+            const sessionName = selectedSession.name;
+
+            // createdAt이 문자열, Date 또는 Timestamp 객체일 수 있으므로 안전하게 처리
+            let sessionMonth: number | null = null;
+            let sessionYear: number | null = null;
+
+            if (selectedSession.createdAt) {
+                // 문자열이나 숫자인 경우 Date 객체로 변환
+                const createdAtDate = new Date(selectedSession.createdAt);
+
+                // 유효한 날짜인지 확인
+                if (!isNaN(createdAtDate.getTime())) {
+                    sessionMonth = createdAtDate.getMonth() + 1; // 0-11에서 1-12로 변환
+                    sessionYear = createdAtDate.getFullYear();
+                }
+            }
+
+            // 같은 이름과 생성 월/년도를 가진 세션 ID 목록 생성
+            const sessionsToDelete = trainingSessions.filter(session => {
+                // 이름이 같은지 확인
+                if (session.name !== sessionName) return false;
+
+                // 생성 월이 추출되지 않았다면 이름만으로 비교
+                if (sessionMonth === null || sessionYear === null) {
+                    return true;
+                }
+
+                // createdAt이 없으면 이름으로만 비교
+                if (!session.createdAt) return true;
+
+                // 문자열이나 숫자인 경우 Date 객체로 변환
+                const createdAtDate = new Date(session.createdAt);
+
+                // 유효한 날짜가 아니면 이름으로만 비교
+                if (isNaN(createdAtDate.getTime())) return true;
+
+                // 세션의 생성 월과 년도 추출
+                const month = createdAtDate.getMonth() + 1;
+                const year = createdAtDate.getFullYear();
+
+                // 이름이 같고, 생성 월과 년도가 같은 세션만 필터링
+                return month === sessionMonth && year === sessionYear;
+            }).map(session => session.id);
+
+            // 일괄 삭제를 위한 batch 작업
+            const batch = writeBatch(db);
+
+            sessionsToDelete.forEach(sessionId => {
+                const sessionRef = doc(db, 'trainingSessions', user.uid, 'sessions', sessionId);
+                batch.delete(sessionRef);
+            });
+
+            await batch.commit();
+
+            // 상태 업데이트
+            setTrainingSessions(prevSessions =>
+                prevSessions.filter(session => !sessionsToDelete.includes(session.id))
+            );
+            setSessionsForSelectedDate(prevSessions =>
+                prevSessions.filter(session => !sessionsToDelete.includes(session.id))
+            );
+
+            console.log(`${sessionsToDelete.length}개의 세션이 삭제되었습니다.`);
+            handleCloseDeleteSessionDialog();
+
+        } catch (error) {
+            console.error('훈련 세션 삭제 오류:', error);
+        }
+    };
+
     if (loading) {
         return (
             <Container maxWidth="lg" sx={{ textAlign: 'center', mt: 10 }}>
@@ -1226,6 +1340,7 @@ export default function Home() {
                                     key={`${session.id}-${session.priority}`}
                                     className="session-card"
                                     draggable={!selectedDate.isBefore(dayjs(), 'day')} // 과거 날짜는 드래그 불가
+                                    onClick={(e) => handleSessionClick(e, session.id)} // 클릭 이벤트 추가
                                     onDragStart={(e) => handleSessionDragStart(e, index)}
                                     onDragOver={(e) => handleSessionDragOver(e, index)}
                                     onDragLeave={handleSessionDragLeave}
@@ -1371,6 +1486,47 @@ export default function Home() {
                         닫기
                     </Button>
                 </DialogActions>
+                {/* 세션 삭제 확인 다이얼로그 */}
+                <Dialog
+                    open={deleteSessionDialogOpen}
+                    onClose={handleCloseDeleteSessionDialog}
+                    PaperProps={{
+                        sx: {
+                            borderRadius: 2,
+                            bgcolor: '#18181b',
+                            color: '#efeff1'
+                        }
+                    }}
+                >
+                    <DialogTitle sx={{ color: '#efeff1' }}>
+                        훈련 세션 삭제
+                    </DialogTitle>
+                    <DialogContent>
+                        <Typography sx={{ color: '#adadb8' }}>
+                            이 훈련 세션을 삭제하시겠습니까? 같은 이름과 생성 월의 모든 세션이 함께 삭제됩니다.
+                        </Typography>
+                    </DialogContent>
+                    <DialogActions sx={{ p: 2 }}>
+                        <Button
+                            onClick={handleCloseDeleteSessionDialog}
+                            sx={{ color: '#adadb8' }}
+                        >
+                            취소
+                        </Button>
+                        <Button
+                            onClick={handleDeleteSession}
+                            variant="contained"
+                            sx={{
+                                bgcolor: '#dc3545',
+                                '&:hover': {
+                                    bgcolor: '#c82333'
+                                }
+                            }}
+                        >
+                            삭제
+                        </Button>
+                    </DialogActions>
+                </Dialog>
             </Dialog>
         </Container>
     );
