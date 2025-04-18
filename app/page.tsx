@@ -1127,6 +1127,11 @@ export default function Home() {
             return;
         }
 
+        // 과거 날짜의 세션은 삭제 불가
+        if (selectedDate && selectedDate.isBefore(dayjs(), 'day')) {
+            return;
+        }
+
         setSelectedSessionId(sessionId);
         setDeleteSessionDialogOpen(true);
     };
