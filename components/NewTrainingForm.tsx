@@ -202,8 +202,17 @@ const NewTrainingForm = () => {
                     const endDate = formValues.date.clone().add(3, 'month'); // 3개월 동안의 반복 세션 생성
 
                     while (currentDate.isBefore(endDate)) {
-                        if (formValues.repeatType === 'daily') {
+                        if (formValues.repeatType === 'daily-all') {
                             currentDate = currentDate.add(1, 'day');
+                        } else if (formValues.repeatType === 'daily-weekday') {
+                            currentDate = currentDate.add(1, 'day');
+                            // 주말(토요일=6, 일요일=0)인 경우 건너뛰기
+                            const dayOfWeek = currentDate.day();
+                            if (dayOfWeek === 0) { // 일요일
+                                currentDate = currentDate.add(1, 'day');
+                            } else if (dayOfWeek === 6) { // 토요일
+                                currentDate = currentDate.add(2, 'day');
+                            }
                         } else if (formValues.repeatType === 'weekly') {
                             currentDate = currentDate.add(1, 'week');
                         }
@@ -335,13 +344,15 @@ const NewTrainingForm = () => {
                     onChange={handleRepeatTypeChange}
                 >
                     <MenuItem value="none">반복 없음</MenuItem>
-                    <MenuItem value="daily">매일</MenuItem>
+                    <MenuItem value="daily-all">매일(주말포함)</MenuItem>
+                    <MenuItem value="daily-weekday">매일(주말제외)</MenuItem>
                     <MenuItem value="weekly">매주</MenuItem>
                 </Select>
                 <FormHelperText>
                     {formValues.repeatType === 'none' ? '이 훈련은 한 번만 진행됩니다.' :
-                        formValues.repeatType === 'daily' ? '이 훈련은 매일 반복됩니다.' :
-                            '이 훈련은 매주 같은 요일에 반복됩니다.'}
+                        formValues.repeatType === 'daily-all' ? '이 훈련은 매일(주말 포함) 반복됩니다.' :
+                            formValues.repeatType === 'daily-weekday' ? '이 훈련은 매일(주말 제외) 반복됩니다.' :
+                                '이 훈련은 매주 같은 요일에 반복됩니다.'}
                 </FormHelperText>
             </FormControl>
 

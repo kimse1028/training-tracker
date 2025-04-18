@@ -3,7 +3,7 @@ import { Timestamp } from 'firebase/firestore';
 /**
  * 훈련 세션의 타입 정의
  */
-export type RepeatType = 'none' | 'daily' | 'weekly';
+export type RepeatType = 'none' | 'daily-weekday' | 'daily-all' | 'weekly';
 
 export interface TrainingSession {
     id: string;
