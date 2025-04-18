@@ -1404,7 +1404,7 @@ export default function Home() {
                                         p: 2,
                                         mt: 2,
                                         borderLeft: '4px solid #9147ff',
-                                        transition: 'all 0.2s',
+                                        transition: 'all 0.3s',
                                         cursor: !selectedDate.isBefore(dayjs(), 'day') ? 'grab' : 'default',
                                         '&:hover': {
                                             ...((!selectedDate.isBefore(dayjs(), 'day') && !isSessionDragging) && {
@@ -1415,6 +1415,12 @@ export default function Home() {
                                         '&:active': {
                                             cursor: !selectedDate.isBefore(dayjs(), 'day') ? 'grabbing' : 'default'
                                         },
+                                        ...(isSessionDragging && draggedSessionItem === index && {
+                                            boxShadow: '0 10px 25px rgba(145, 71, 255, 0.3)',
+                                            opacity: 0.6,
+                                            border: '1px dashed #9147ff',
+                                            borderLeft: '4px solid #9147ff',
+                                        }),
                                         ...(session.completed && {
                                             opacity: 0.7,
                                             borderLeft: '4px solid #00b5ad',
