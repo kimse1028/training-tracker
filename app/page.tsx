@@ -616,6 +616,7 @@ export default function Home() {
     const [deleteSessionDialogOpen, setDeleteSessionDialogOpen] = useState<boolean>(false);
     const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
     const [deleteLoading, setDeleteLoading] = useState<boolean>(false);
+    const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
 
     useEffect(() => {
@@ -1178,12 +1179,17 @@ export default function Home() {
                 prevSessions.filter(session => !sessionsToDelete.includes(session.id))
             );
 
+            // handleDeleteSession 함수 내 성공 시 부분 (try 블록 내 마지막 부분)
             console.log(`${sessionsToDelete.length}개의 세션이 삭제되었습니다.`);
 
-            // 성공 메시지 표시를 위한 지연 추가 (실제로는 삭제가 완료됨)
-            await new Promise(resolve => setTimeout(resolve, 500));
+            // 성공 메시지 설정
+            setSuccessMessage(`${sessionsToDelete.length}개의 "${sessionName}" 세션이 삭제되었습니다.`);
 
+            // 다이얼로그 닫기
             handleCloseDeleteSessionDialog();
+
+            // 3초 후 메시지 사라짐
+            setTimeout(() => setSuccessMessage(null), 3000);
 
         } catch (error) {
             console.error('훈련 세션 삭제 오류:', error);
@@ -1348,6 +1354,32 @@ export default function Home() {
                         </Button>
                     )}
                 </DialogTitle>
+                {/* 성공 메시지 */}
+                {successMessage && (
+                    <Box sx={{
+                        position: 'fixed',
+                        bottom: 20,
+                        left: '50%',
+                        transform: 'translateX(-50%)',
+                        zIndex: 9999,
+                        minWidth: 300,
+                        maxWidth: '80%',
+                        p: 2,
+                        bgcolor: 'rgba(0, 181, 173, 0.9)',
+                        color: '#fff',
+                        borderRadius: 2,
+                        boxShadow: '0 4px 20px rgba(0, 0, 0, 0.15)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 1.5
+                    }}>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <path d="M8 12l2 2 4-4"></path>
+                        </svg>
+                        {successMessage}
+                    </Box>
+                )}
                 <DialogContent sx={{ pt: 3 }}>
                     {sessionsForSelectedDate.length > 0 ? (
                         <Box>
