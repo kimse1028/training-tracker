@@ -615,6 +615,7 @@ export default function Home() {
     const [forceRefresh, setForceRefresh] = useState(0);
     const [deleteSessionDialogOpen, setDeleteSessionDialogOpen] = useState<boolean>(false);
     const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+    const [deleteLoading, setDeleteLoading] = useState<boolean>(false);
 
 
     useEffect(() => {
@@ -1105,6 +1106,8 @@ export default function Home() {
         if (!selectedSessionId || !user) return;
 
         try {
+            setDeleteLoading(true); // 로딩 시작
+
             // 선택된 세션 정보 가져오기
             const selectedSession = trainingSessions.find(session => session.id === selectedSessionId);
             if (!selectedSession) {
@@ -1176,10 +1179,16 @@ export default function Home() {
             );
 
             console.log(`${sessionsToDelete.length}개의 세션이 삭제되었습니다.`);
+
+            // 성공 메시지 표시를 위한 지연 추가 (실제로는 삭제가 완료됨)
+            await new Promise(resolve => setTimeout(resolve, 500));
+
             handleCloseDeleteSessionDialog();
 
         } catch (error) {
             console.error('훈련 세션 삭제 오류:', error);
+        } finally {
+            setDeleteLoading(false); // 로딩 종료
         }
     };
 
@@ -1563,21 +1572,30 @@ export default function Home() {
                         <Button
                             onClick={handleDeleteSession}
                             variant="contained"
+                            disabled={deleteLoading}
                             startIcon={
-                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                    <path d="M3 6h18"></path>
-                                    <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
-                                    <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
-                                </svg>
+                                deleteLoading ? (
+                                    <CircularProgress size={16} sx={{ color: '#fff' }} />
+                                ) : (
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M3 6h18"></path>
+                                        <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
+                                        <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
+                                    </svg>
+                                )
                             }
                             sx={{
                                 bgcolor: '#dc3545',
                                 '&:hover': {
                                     bgcolor: '#c82333'
+                                },
+                                '&.Mui-disabled': {
+                                    bgcolor: 'rgba(220, 53, 69, 0.6)',
+                                    color: '#fff'
                                 }
                             }}
                         >
-                            삭제
+                            {deleteLoading ? '삭제 중...' : '삭제'}
                         </Button>
                     </DialogActions>
                 </Dialog>
