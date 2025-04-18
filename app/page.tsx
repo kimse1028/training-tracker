@@ -223,20 +223,37 @@ const FeedbackSection = ({
             {/* 성공 메시지 */}
             {successMessage && (
                 <Box sx={{
-                    mb: 2,
-                    p: 1.5,
-                    bgcolor: 'rgba(0, 181, 173, 0.1)',
-                    borderRadius: 1,
-                    border: '1px solid rgba(0, 181, 173, 0.3)',
-                    color: '#00b5ad',
-                    fontWeight: 500,
+                    position: 'fixed',
+                    bottom: 20,
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    zIndex: 9999,
+                    minWidth: 300,
+                    maxWidth: '80%',
+                    p: 2,
+                    bgcolor: 'rgba(0, 181, 173, 0.95)',
+                    color: '#fff',
+                    borderRadius: 2,
+                    boxShadow: '0 4px 20px rgba(0, 0, 0, 0.25)',
                     display: 'flex',
-                    alignItems: 'center'
+                    alignItems: 'center',
+                    gap: 1.5,
+                    backdropFilter: 'blur(5px)',
+                    border: '1px solid rgba(0, 181, 173, 0.3)'
                 }}>
-                    <Box sx={{ mr: 1, display: 'flex', alignItems: 'center' }}>
-                        ✓
+                    <Box sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                    }}>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <path d="M8 12l2 2 4-4"></path>
+                        </svg>
                     </Box>
-                    {successMessage}
+                    <Typography sx={{ fontSize: '0.95rem', fontWeight: 500 }}>
+                        {successMessage}
+                    </Typography>
                 </Box>
             )}
 
@@ -1626,16 +1643,29 @@ export default function Home() {
                         sx: {
                             borderRadius: 2,
                             bgcolor: '#18181b',
-                            color: '#efeff1'
+                            color: '#efeff1',
+                            width: '100%',
+                            maxWidth: '400px', // 최대 너비 설정
+                            margin: '0 auto', // 중앙 정렬
+                            position: 'relative',
+                            overflow: 'hidden'
+                        }
+                    }}
+                    BackdropProps={{
+                        sx: {
+                            backgroundColor: 'rgba(0, 0, 0, 0.7)'
                         }
                     }}
                 >
                     <DialogTitle sx={{
                         color: '#efeff1',
                         borderBottom: '1px solid rgba(220, 53, 69, 0.2)',
-                        pb: 2
+                        pb: 2,
+                        textAlign: 'left', // 왼쪽 정렬
+                        fontSize: '1.2rem', // 글자 크기 조정
+                        fontWeight: 500
                     }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
                             <Box sx={{
                                 color: '#dc3545',
                                 bgcolor: 'rgba(220, 53, 69, 0.1)',
@@ -1647,15 +1677,20 @@ export default function Home() {
                                     <path d="M3 6h18"></path>
                                     <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
                                     <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
-                                    <line x1="10" y1="11" x2="10" y2="17"></line>
-                                    <line x1="14" y1="11" x2="14" y2="17"></line>
                                 </svg>
                             </Box>
                             훈련 세션 삭제
                         </Box>
                     </DialogTitle>
-                    <DialogContent sx={{ py: 3 }}>
-                        <Typography sx={{ color: '#adadb8', mb: 2 }}>
+                    <DialogContent sx={{ py: 3, px: 3 }}>
+                        <Typography sx={{
+                            color: '#efeff1',
+                            mb: 2,
+                            mt: 2,
+                            fontSize: '1rem',
+                            fontWeight: 400,
+                            lineHeight: 1.5
+                        }}>
                             <strong>{getSelectedSessionName()}</strong> 세션을 삭제하시겠습니까?
                         </Typography>
                         <Box sx={{
@@ -1663,21 +1698,53 @@ export default function Home() {
                             bgcolor: 'rgba(220, 53, 69, 0.05)',
                             border: '1px solid rgba(220, 53, 69, 0.2)',
                             borderRadius: 1,
-                            mb: 1
+                            mb: 1,
+                            display: 'flex',
+                            alignItems: 'flex-start',
+                            gap: 1.5
                         }}>
-                            <Typography sx={{ color: '#dc3545', fontSize: '0.9rem' }}>
+                            <Box sx={{
+                                color: '#dc3545',
+                                mt: 0.5,
+                                display: 'flex'
+                            }}>
+                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <circle cx="12" cy="12" r="10"></circle>
+                                    <line x1="12" y1="8" x2="12" y2="12"></line>
+                                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                                </svg>
+                            </Box>
+                            <Typography sx={{
+                                color: '#dc3545',
+                                fontSize: '0.9rem',
+                                fontWeight: 400,
+                                lineHeight: 1.5
+                            }}>
                                 주의: 같은 이름과 생성 월을 가진 모든 세션이 함께 삭제됩니다.
                             </Typography>
                         </Box>
-                        <Typography variant="caption" sx={{ color: '#adadb8', display: 'block', mt: 1 }}>
+                        <Typography variant="caption" sx={{
+                            color: '#adadb8',
+                            display: 'block',
+                            mt: 1,
+                            fontSize: '0.8rem'
+                        }}>
                             이 작업은 되돌릴 수 없습니다.
                         </Typography>
                     </DialogContent>
-                    <DialogActions sx={{ p: 2, borderTop: '1px solid rgba(145, 71, 255, 0.1)' }}>
+                    <DialogActions sx={{
+                        p: 2,
+                        borderTop: '1px solid rgba(145, 71, 255, 0.1)',
+                        display: 'flex',
+                        justifyContent: 'flex-end',
+                        gap: 1
+                    }}>
                         <Button
                             onClick={handleCloseDeleteSessionDialog}
                             sx={{
                                 color: '#adadb8',
+                                fontSize: '0.9rem',
+                                padding: '6px 16px',
                                 '&:hover': {
                                     bgcolor: 'rgba(173, 173, 184, 0.1)'
                                 }
@@ -1702,6 +1769,8 @@ export default function Home() {
                             }
                             sx={{
                                 bgcolor: '#dc3545',
+                                fontSize: '0.9rem',
+                                padding: '6px 16px',
                                 '&:hover': {
                                     bgcolor: '#c82333'
                                 },
