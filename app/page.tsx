@@ -617,6 +617,7 @@ export default function Home() {
     const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
     const [deleteLoading, setDeleteLoading] = useState<boolean>(false);
     const [successMessage, setSuccessMessage] = useState<string | null>(null);
+    const [completedSessionId, setCompletedSessionId] = useState<string | null>(null);
 
 
     useEffect(() => {
@@ -808,6 +809,16 @@ export default function Home() {
         try {
             if (!user) return;
 
+            // 완료 표시될 때만 애니메이션 ID 설정
+            if (completed) {
+                setCompletedSessionId(sessionId);
+
+                // 잠시 후 애니메이션 ID 초기화
+                setTimeout(() => {
+                    setCompletedSessionId(null);
+                }, 1500);
+            }
+
             setTrainingSessions(prev =>
                 prev.map(session =>
                     session.id === sessionId
@@ -835,6 +846,16 @@ export default function Home() {
                 });
 
                 console.log('세션 업데이트 성공:', sessionId);
+
+                // 완료 시 성공 메시지 표시
+                if (completed) {
+                    const sessionName = trainingSessions.find(s => s.id === sessionId)?.name || '훈련 세션';
+                    setSuccessMessage(`'${sessionName}' 세션이 완료되었습니다! 🎉`);
+
+                    // 3초 후 메시지 사라짐
+                    setTimeout(() => setSuccessMessage(null), 3000);
+                }
+
                 return updateResult;
             } catch (error) {
                 console.warn('새 경로 업데이트 실패, 레거시 경로 시도... : ', error);
@@ -855,10 +876,18 @@ export default function Home() {
         } catch (error) {
             console.error('훈련 세션 업데이트 처리 중 오류:', error);
         }
-    }, [user]);
+    }, [user, trainingSessions]);
 
     const handleTimerComplete = useCallback(() => {
         if (activeTimerSessionId) {
+            // 타이머 완료 시 애니메이션 효과 추가
+            setCompletedSessionId(activeTimerSessionId);
+
+            // 애니메이션 효과 후 초기화
+            setTimeout(() => {
+                setCompletedSessionId(null);
+            }, 1500);
+
             setTimeout(() => {
                 handleCheckSession(activeTimerSessionId, true);
                 setActiveTimerSessionId(null);
@@ -1406,6 +1435,8 @@ export default function Home() {
                                         borderLeft: '4px solid #9147ff',
                                         transition: 'all 0.3s',
                                         cursor: !selectedDate.isBefore(dayjs(), 'day') ? 'grab' : 'default',
+                                        position: 'relative',
+                                        overflow: 'hidden',
                                         '&:hover': {
                                             ...((!selectedDate.isBefore(dayjs(), 'day') && !isSessionDragging) && {
                                                 transform: 'translateY(-2px)',
@@ -1424,7 +1455,43 @@ export default function Home() {
                                         ...(session.completed && {
                                             opacity: 0.7,
                                             borderLeft: '4px solid #00b5ad',
-                                        })
+                                        }),
+                                        ...(completedSessionId === session.id && {
+                                            animation: 'pulse 1.5s',
+                                            '@keyframes pulse': {
+                                                '0%': {
+                                                    boxShadow: '0 0 0 0 rgba(0, 181, 173, 0.7)',
+                                                },
+                                                '70%': {
+                                                    boxShadow: '0 0 0 10px rgba(0, 181, 173, 0)',
+                                                },
+                                                '100%': {
+                                                    boxShadow: '0 0 0 0 rgba(0, 181, 173, 0)',
+                                                },
+                                            },
+                                        }),
+                                        ...(completedSessionId === session.id && {
+                                            '&::after': {
+                                                content: '""',
+                                                position: 'absolute',
+                                                top: 0,
+                                                left: 0,
+                                                right: 0,
+                                                bottom: 0,
+                                                background: 'linear-gradient(to right, rgba(0, 181, 173, 0.1), rgba(0, 181, 173, 0))',
+                                                animation: 'shine 1.5s ease-in-out',
+                                                zIndex: 1,
+                                                pointerEvents: 'none',
+                                            },
+                                            '@keyframes shine': {
+                                                '0%': {
+                                                    transform: 'translateX(-100%)'
+                                                },
+                                                '100%': {
+                                                    transform: 'translateX(100%)'
+                                                },
+                                            },
+                                        }),
                                     }}
                                 >
                                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
